@@ -1,0 +1,66 @@
+{
+  "state": {
+    "pr": {
+      "title": "Fix race in session cache eviction",
+      "body": "Evictions could run while a write was mid-flight, leaving a dangling entry. Added a lock around evict() and a regression test. Also bumped the tokio dev-dependency because the test needed `time::pause`.",
+      "files_changed": ["src/cache/session.rs", "src/cache/tests.rs", "Cargo.toml"],
+      "additions": 61,
+      "deletions": 9,
+      "touches_auth": false,
+      "touches_migrations": false,
+      "ci": "passing",
+      "author_role": "senior engineer"
+    },
+    "policy": {
+      "auto_merge_allowed_for": "test-only or docs-only changes with passing CI",
+      "requires_two_reviewers": "changes under src/auth or database migrations"
+    }
+  },
+  "questions": {
+    "change_kind": {
+      "type": "choice",
+      "instructions": "What kind of change is `pr` primarily?",
+      "criteria": {
+        "bugfix": "Fixes incorrect behavior in existing code",
+        "feature": "Adds new user-facing or API behavior",
+        "refactor": "Restructures code without changing behavior",
+        "tests_only": "Only adds or changes tests",
+        "docs_only": "Only documentation or comments",
+        "dependency": "Primarily a dependency or build change"
+      }
+    },
+    "concurrency_risk": {
+      "type": "noul",
+      "instructions": "Does `pr` change locking, threading, or async scheduling behavior?",
+      "criteria": {
+        "true": "Adds, removes, or moves a lock, or changes how concurrent work is scheduled",
+        "false": "No change to concurrency behavior"
+      }
+    },
+    "scope_creep": {
+      "type": "noul",
+      "instructions": "Does `pr.body` describe a change unrelated to the stated fix?",
+      "criteria": {
+        "true": "Bundles an unrelated change with the fix",
+        "false": "Every described change serves the stated fix"
+      }
+    },
+    "eligible_auto_merge": {
+      "type": "noul",
+      "instructions": "Is `pr` eligible for auto-merge under `policy.auto_merge_allowed_for`?"
+    },
+    "needs_two_reviewers": {
+      "type": "noul",
+      "instructions": "Does `pr` fall under `policy.requires_two_reviewers`, judging by `pr.files_changed`?"
+    },
+    "review_depth": {
+      "type": "score",
+      "instructions": "How careful should the human review of `pr` be?",
+      "criteria": [
+        "Skim: low-risk, mechanical, well tested",
+        "Standard: read the diff, check the test",
+        "Deep: reason about edge cases, run locally, possibly pair"
+      ]
+    }
+  }
+}
