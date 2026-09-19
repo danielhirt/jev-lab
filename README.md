@@ -18,7 +18,7 @@ bun install
 bun run lab --help
 ```
 
-See [docs/how-jev-works.md](docs/how-jev-works.md) for the model contract, question-writing rules, and the full findings.
+See [docs/how-jev-works.md](docs/how-jev-works.md) for the model contract, question-writing rules, and the full findings. Experiments still to run are in [docs/ideas.md](docs/ideas.md).
 
 ## Commands
 
