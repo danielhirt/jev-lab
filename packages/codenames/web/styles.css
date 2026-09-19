@@ -37,6 +37,9 @@ body {
 a { color: var(--accent); }
 h1 { font-size: 1.45rem; margin: 0 0 4px; letter-spacing: -0.01em; }
 .tag { margin: 0; color: var(--ink-2); max-width: 44rem; }
+.stat { margin: 6px 0 0; color: var(--ink); font-size: 0.92rem; max-width: 44rem; }
+.stat b { font-variant-numeric: tabular-nums; }
+.stat a { color: var(--ink-2); }
 .top { display: flex; flex-wrap: wrap; gap: 16px 32px; justify-content: space-between; align-items: flex-end; padding: 22px 0 14px; }
 .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
@@ -81,6 +84,10 @@ button.ghost { background: transparent; color: var(--ink); border: 1px solid var
 .cardw .word { font-weight: 700; letter-spacing: 0.04em; font-size: clamp(0.72rem, 1.7vw, 1rem); text-transform: uppercase; word-break: break-word; }
 .cardw .meta { display: flex; justify-content: space-between; align-items: flex-end; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .cardw .p { opacity: 0.9; }
+.cardw .alt { display: flex; align-items: center; gap: 5px; font-size: 0.72rem; opacity: 0.9; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.cardw .alt i { display: inline-block; height: 5px; width: 44px; border-radius: 3px; background: currentColor; opacity: 0.18; position: relative; overflow: hidden; }
+.cardw .alt i::after { content: ""; position: absolute; inset: 0; width: var(--w, 0%); background: currentColor; opacity: 1; }
+.cardw .alt .tag2 { font-weight: 600; letter-spacing: 0.04em; opacity: 0.75; }
 .cardw .key { display: inline-flex; gap: 4px; align-items: center; font-size: 0.72rem; opacity: 0.85; }
 .cardw .key .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.15); }
 .dot.agent { background: var(--agent); } .dot.bystander { background: var(--bystander); } .dot.assassin { background: var(--assassin); }
@@ -115,6 +122,19 @@ label { color: var(--ink-2); font-size: 0.9rem; display: block; margin-bottom: 4
 .note.err { color: #c0392b; }
 .open-clue { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.06em; margin: 10px 0 6px; }
 .open-clue small { font-size: 0.85rem; font-weight: 500; letter-spacing: 0; color: var(--ink-2); display: block; }
+.toggle { display: flex; gap: 8px; align-items: center; color: var(--ink-2); font-size: 0.9rem; margin-top: 10px; cursor: pointer; }
+.compare { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; font-size: 0.88rem; display: grid; gap: 6px; }
+.compare .rowc { display: grid; grid-template-columns: 6.5em 1fr; gap: 8px; align-items: baseline; color: var(--ink-2); }
+.compare .rowc b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.compare .who { font-weight: 700; color: var(--ink); }
+.compare .verdict { color: var(--ink); margin-top: 2px; }
+.feed { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; font-size: 0.85rem; color: var(--ink-2); }
+.feed .count { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; margin-bottom: 6px; }
+.feed ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 12.5em; overflow: hidden; }
+.feed li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.feed li.ok { color: var(--ink); }
+.feed li .cl { font-weight: 700; letter-spacing: 0.03em; }
+.feed li .why { color: var(--ink-3); }
 .pipeline { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; font-size: 0.88rem; color: var(--ink-2); }
 .pipeline b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .pipeline .steps { display: flex; flex-wrap: wrap; gap: 4px 10px; }

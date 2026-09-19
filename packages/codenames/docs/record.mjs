@@ -24,6 +24,18 @@ await page.addInitScript(() => {
 });
 
 const pause = (ms) => page.waitForTimeout(ms);
+/** A caption bar at the bottom of the frame; empty text hides it. */
+async function caption(text) {
+  await page.evaluate((t) => {
+    let el = document.getElementById("rec-caption");
+    if (!el) {
+      el = document.createElement("div"); el.id = "rec-caption";
+      el.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:min(900px,92vw);background:rgba(26,26,25,.92);color:#fcfcfb;font:600 20px/1.35 system-ui,sans-serif;padding:12px 18px;border-radius:12px;z-index:9998;text-align:center;transition:opacity 180ms;pointer-events:none";
+      document.body.append(el);
+    }
+    el.textContent = t; el.style.opacity = t ? "1" : "0";
+  }, text);
+}
 async function moveTo(selector) {
   const box = await page.locator(selector).first().boundingBox();
   if (!box) return false;
@@ -47,26 +59,43 @@ async function giveAndWait(number) {
 
 await page.goto(`${base}/?seed=7&mode=spymaster`);
 await page.waitForSelector(".cardw");
-await pause(1800); mark("board");
+await caption("You are the spymaster. Jev guesses. Every card shows the probability Jev assigns as you type."); await pause(2600); mark("board");
 
 // 1. A tempting clue that reaches the assassin: the heatmap says no before anyone guesses.
-await typeClue("horse"); await pause(3200); mark("horse: saddle lights up");
+await caption("Try HORSE."); await typeClue("horse"); await pause(900);
+await caption("SADDLE is the assassin. Jev puts it above 0.9 before anyone has guessed. A calibrated number is a warning you can act on."); await pause(3600); mark("horse: saddle lights up");
+
 // 2. Canyon 2: valley clears the bar, desert sits in the uncertain band, Jev stops after one.
-await typeClue("canyon"); await pause(2600); mark("canyon preview");
-await giveAndWait(2); await pause(2200); mark("canyon guessed");
-// 3. Rain 1.
-await typeClue("rain"); await pause(2000); mark("rain preview");
-await giveAndWait(1); await pause(1800); mark("rain guessed");
+await caption("CANYON: VALLEY clears the 0.70 bar, DESERT sits hatched in the uncertain band."); await typeClue("canyon"); await pause(2800); mark("canyon preview");
+await caption("Say CANYON 2 anyway. Jev guesses only what clears the bar, then stops."); await giveAndWait(2); await pause(2400); mark("canyon guessed");
+
+// 3. Side by side with a chat model, if the server has one configured.
+const hasCompare = !(await page.locator("#compare-wrap").isHidden());
+if (hasCompare) {
+  await caption("Now ask a chat model the same question about the same clue, side by side."); await click("#compare"); await typeClue("rain");
+  await page.waitForFunction(() => document.querySelector("#compare-strip .verdict") !== null, null, { timeout: 60000 });
+  await pause(4200); mark("compare rain");
+  await caption("Replay both. Jev's numbers hold to a hundredth; watch what the chat model does."); await click("#replay");
+  await page.waitForFunction(() => document.getElementById("replay-note").textContent.includes("temperature"), null, { timeout: 60000 }); await pause(4200); mark("compare replay");
+  await click("#compare");
+} else {
+  await caption("RAIN 1."); await typeClue("rain"); await pause(2000); mark("rain preview");
+}
+await caption(""); await giveAndWait(1); await pause(1600); mark("rain guessed");
+
 // 4. Library: replay shows the numbers hold, then give it.
-await typeClue("library"); await pause(1800); mark("library preview");
-await click("#replay"); await page.waitForFunction(() => document.getElementById("replay-note").textContent.length > 0, null, { timeout: 15000 }); await pause(2800); mark("replay");
-await giveAndWait(1); await pause(1800); mark("library guessed");
+await caption("LIBRARY. Replay the same clue: the largest change across 25 words is a few hundredths."); await typeClue("library"); await pause(1600); mark("library preview");
+await click("#replay"); await page.waitForFunction(() => document.getElementById("replay-note").textContent.length > 0, null, { timeout: 60000 }); await pause(3000); mark("replay");
+await caption(""); await giveAndWait(1); await pause(1600); mark("library guessed");
 
 // 5. Switch roles: Jev gives the clues.
-await click("#mode-guesser"); await page.waitForFunction(() => !document.getElementById("ask").disabled, null, { timeout: 15000 }); await pause(1200); mark("guesser mode");
+await caption("Swap roles. A language model proposes clue words; Jev judges every candidate against every word; code picks.");
+await click("#mode-guesser"); await page.waitForFunction(() => !document.getElementById("ask").disabled, null, { timeout: 15000 }); await pause(2200); mark("guesser mode");
 await click("#ask");
+await page.waitForFunction(() => document.querySelectorAll("#feed li").length >= 4, null, { timeout: 60000 });
+await caption("Every verdict, live: thousands of word pairs in a few seconds for a cent. Rejections say why."); await pause(3200); mark("feed");
 await page.waitForFunction(() => !document.getElementById("open-clue").hidden || document.querySelectorAll("#log li").length > 0, null, { timeout: 120000 });
-await pause(2600); mark("clue asked");
+await pause(1800); await caption("Jev's probabilities stay hidden until the guess. Tap a card."); await pause(1800); mark("clue asked");
 const clue = (await page.textContent("#open-clue"))?.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
 const known = { china: "tea", evening: "night", camping: "tent", library: "book", rain: "umbrella", dark: "night", reading: "book", literature: "book", insect: "spider", bug: "spider", wild: "zoo", animal: "zoo", safari: "zoo", weather: "umbrella", sleep: "night", bedroom: "night", beverage: "tea", breakfast: "tea", coffee: "tea", hunting: "trap", fishing: "trap", mountain: "valley", landscape: "valley", nature: "valley", hiking: "valley", egypt: "desert", arctic: "desert", climate: "desert" };
 const pick = known[clue];
@@ -78,7 +107,8 @@ if (pick && (await page.locator(".cardw.clickable", { hasText: new RegExp(`^${pi
   await pause(800); await click("#pass"); mark(`passed on ${clue}`);
 }
 await page.waitForFunction(() => document.querySelectorAll(".cardw.heat").length > 0, null, { timeout: 15000 });
-await pause(3800); mark("heat revealed");
+await caption("Turn over: the board shows what Jev was thinking and which word it meant."); await pause(4200); mark("heat revealed");
+await caption("");
 
 await ctx.close();
 await browser.close();

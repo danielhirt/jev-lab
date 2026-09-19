@@ -13,7 +13,7 @@ export interface Judge {
 export class TypeSafeJudge implements Judge {
   constructor(
     private readonly client: TypeSafeClient = new TypeSafeClient(),
-    private readonly model: string = DEFAULT_MODEL,
+    readonly model: string = DEFAULT_MODEL,
     private readonly style: QuestionStyle = "full",
   ) {}
 

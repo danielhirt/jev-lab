@@ -20,7 +20,9 @@ bun run server/index.ts        # http://localhost:3000
 One cooperative board: you and Jev against 9 agents, 15 bystanders, and 1 assassin, in 9 turns.
 
 - **I give clues, Jev guesses.** Type a clue and the board lights up as you type: one request, 25 nouls and a choice, about 300 ms. The note under the input says what Jev would guess. "Replay the judgment" sends the same clue again and reports the largest change across the 25 words, which is how consistency is shown rather than claimed.
-- **Jev gives clues, I guess.** Claude proposes candidate words from the key, code drops illegal ones, Jev judges every candidate against every word, code picks. The pipeline strip shows each step with its count, time, and cost. Jev's probabilities stay hidden until your turn ends, then the board shows what it was thinking and which words it meant.
+- **Side by side.** With an Anthropic key configured, a toggle asks a chat model (default Claude Haiku 4.5, `BASELINE_MODEL` to change it) the same question about the same clue in one structured call at temperature 0. Each card shows both numbers; a strip compares latency, cost, and how many words each model left in the uncertain band; replay reports both models' largest change. The comparison never drives play.
+- **Jev gives clues, I guess.** Claude proposes candidate words from the key, code drops illegal ones, Jev judges every candidate against every word, code picks. Verdicts stream to the page as they land, with the reason for each rejection, and the pipeline strip sums the turn. Jev's probabilities stay hidden until your turn ends, then the board shows what it was thinking and which words it meant.
+- **The header carries the evidence:** the phase 0 numbers from the eval below, served from `/api/config`.
 
 ![Typing a clue: HORSE lights up the assassin, CANYON reaches VALLEY and leaves DESERT in the uncertain band](docs/spymaster.gif)
 
@@ -28,7 +30,7 @@ A 48-second recording of both modes is in [`docs/codenames.mp4`](docs/codenames.
 
 Environment: `PORT`, `CODENAMES_STYLE` (`full` or `compact` question wording), `JEV_MODEL`, `PROPOSER_MODEL` (default `claude-opus-5`), `TRUST_PROXY=1` to read `X-Forwarded-For` behind a reverse proxy. Games live in memory for two hours; per-IP token buckets limit previews, new boards, and Jev spymaster turns separately. Keys never reach the browser.
 
-Routes, all JSON under `/api/games`: `POST /` (new game: `mode`, optional `seed`), `GET /:id`, `POST /:id/preview` (`clue`), `POST /:id/clue` (`clue`, `number`), `POST /:id/ask`, `POST /:id/guess` (`word`), `POST /:id/pass`.
+Routes, all JSON under `/api/games`: `POST /` (new game: `mode`, optional `seed`), `GET /:id`, `POST /:id/preview` (`clue`), `POST /:id/baseline` (`clue`; 404 when no comparison model is configured), `POST /:id/clue` (`clue`, `number`), `POST /:id/ask` (with `Accept: text/event-stream` it streams `start`, one `candidate` per verdict, then `done`), `POST /:id/guess` (`word`), `POST /:id/pass`. `GET /api/config` reports the models in use and the eval numbers.
 
 ## Layout
 
@@ -46,6 +48,7 @@ src/
   scorer.ts     thresholds -> number, targets, risks, rejections; pickClue; guessOrder
   game.ts       spymasterTurn (propose -> legality -> judge -> pick, two rounds), applyGuesses, playGame
   proposer.ts   ClaudeProposer (structured output, candidates only), WordlistProposer, ListProposer
+  baseline.ts   ClaudeBaseline: the same question to a chat model, one call, temperature 0; a Judge like any other
   cli.ts        `board <seed>`, `judge <clue> --seed <n>`, `play --seed <n> [--clues a,b,c]`
 eval/
   dataset.ts    ClueRow, the JSONL row shape for human clue data

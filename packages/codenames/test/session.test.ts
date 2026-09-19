@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { askClue, giveClue, guess, newGame, pass, preview, TURN_LIMIT, view, type Game } from "../server/session";
+import { askClue, giveClue, guess, newGame, pass, preview, previewBaseline, TURN_LIMIT, view, type Game } from "../server/session";
 import type { Judge } from "../src/judge";
 import { ListProposer } from "../src/proposer";
 import { DEFAULT_THRESHOLDS, type Judgment } from "../src/types";
@@ -70,6 +70,18 @@ describe("spymaster mode", () => {
   });
 });
 
+describe("baseline preview", () => {
+  test("meters the comparison arm separately and never touches the board", async () => {
+    const g = newGame("s", "spymaster", 5);
+    const j = await previewBaseline(g, "goodone", judgeFor(g));
+    expect(j.words).toHaveLength(25);
+    expect(g.meter.baselineRequests).toBe(1);
+    expect(g.meter.jevRequests).toBe(0);
+    expect(g.turns).toHaveLength(0);
+    await expect(previewBaseline(g, g.board.cards[0]!.word, judgeFor(g))).rejects.toThrow("illegal");
+  });
+});
+
 describe("guesser mode", () => {
   test("askClue withholds the heat until the person's turn ends", async () => {
     const g = newGame("g", "guesser", 5);
@@ -95,6 +107,13 @@ describe("guesser mode", () => {
     expect(g.open).toBeNull();
     expect(view(g).cards.find((c) => c.word === bystander)?.role).toBe("bystander");
     expect(view(g).cards.filter((c) => c.role !== undefined)).toHaveLength(2);
+  });
+
+  test("askClue streams verdicts while it works", async () => {
+    const g = newGame("g", "guesser", 5);
+    const seen: string[] = [];
+    await askClue(g, new ListProposer(["goodclue", "nothing"]), judgeFor(g), DEFAULT_THRESHOLDS, 2, (e) => seen.push(e.clue));
+    expect(seen.sort()).toEqual(["goodclue", "nothing"]);
   });
 
   test("a pass when nothing is eligible costs a turn", async () => {

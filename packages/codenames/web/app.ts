@@ -3,6 +3,7 @@ import type { Judgment } from "../src/types";
 import { download, drawCard, heatStep } from "./card";
 
 type Heat = Record<string, { p: number; first: number }>;
+interface Config { judge: string; style: string; proposer: string; baseline: string | null; eval: { clues: number; guessTop1: number; guessAuc: number; chance: number; repeatStd: number } }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const boardEl = $("board"), statusEl = $("status"), logEl = $("log"), meterEl = $("meter"), pipelineEl = $("pipeline");
@@ -10,12 +11,25 @@ const clueInput = $<HTMLInputElement>("clue"), numberInput = $<HTMLInputElement>
 const previewNote = $("preview-note"), replayNote = $("replay-note"), replayBtn = $<HTMLButtonElement>("replay");
 const giveBtn = $<HTMLButtonElement>("give"), askBtn = $<HTMLButtonElement>("ask"), passBtn = $<HTMLButtonElement>("pass");
 const openClueEl = $("open-clue"), resultEl = $("result"), resultText = $("result-text");
+const compareWrap = $("compare-wrap"), compareBox = $<HTMLInputElement>("compare"), compareStrip = $("compare-strip"), feedEl = $("feed");
 
 let game: GameView | null = null;
 let mode: Mode = "spymaster";
 let heat: Heat | null = null;          // what the board is currently showing
 let lastPreview: Judgment | null = null;
+let baselineHeat: Heat | null = null;   // the chat model's numbers for the same clue
+let lastBaseline: Judgment | null = null;
+let baselineState: "off" | "waiting" | "done" | "error" = "off";
+let baselineError = "";
+let config: Config | null = null;
 let busy = false;
+
+function modelName(id: string | null): string {
+  if (!id) return "a chat model";
+  const m = id.match(/^claude-(\w+)-(\d+)(?:-(\d+))?/);
+  if (m) return `Claude ${m[1]![0]!.toUpperCase()}${m[1]!.slice(1)} ${m[2]}${m[3] ? "." + m[3] : ""}`;
+  return id;
+}
 
 /** POST JSON to the API. Every mutation is a POST, including the body-less ask and pass. */
 async function api<T>(path: string, body: unknown = {}): Promise<T> {
@@ -54,7 +68,16 @@ function renderBoard() {
         el.classList.add("heat", `s${heatStep(h.p)}`);
         if (h.p >= 0.3 && h.p < 0.7) el.classList.add("uncertain");
         const p = document.createElement("span"); p.className = "p"; p.textContent = h.p.toFixed(2); meta.append(p);
-        el.title = `${card.word}: ${h.p.toFixed(3)}; first-pick ${h.first.toFixed(3)}`;
+        el.title = `${card.word}: Jev ${h.p.toFixed(3)}; first-pick ${h.first.toFixed(3)}`;
+        const b = compareBox.checked ? baselineHeat?.[card.word] : undefined;
+        if (b) {
+          const alt = document.createElement("div"); alt.className = "alt";
+          const bar = document.createElement("i"); bar.style.setProperty("--w", `${Math.round(b.p * 100)}%`);
+          const tag = document.createElement("span"); tag.className = "tag2"; tag.textContent = "vs";
+          alt.append(tag, bar, b.p.toFixed(2));
+          el.title += `; ${modelName(config?.baseline ?? null)} ${b.p.toFixed(3)}`;
+          word.after(alt);
+        }
       }
       if (card.role && mode === "spymaster") {
         const key = document.createElement("span"); key.className = "key";
@@ -77,6 +100,7 @@ function renderMeter() {
     ["cost", `$${m.jevCostUsd.toFixed(4)}`],
     ["model time", `${(m.jevMs / 1000).toFixed(1)} s`],
   ];
+  if (m.baselineRequests > 0) rows.push([`${modelName(config?.baseline ?? null)} cost`, `$${m.baselineCostUsd.toFixed(4)}`], [`${modelName(config?.baseline ?? null)} time`, `${(m.baselineMs / 1000).toFixed(1)} s`]);
   meterEl.replaceChildren(...rows.map(([k, v]) => { const d = document.createElement("div"); const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; d.append(dt, dd); return d; }));
 }
 
@@ -110,6 +134,39 @@ function renderPipeline(t: TurnView | undefined) {
   pipelineEl.append(steps);
 }
 
+function bandCounts(j: Judgment | null) {
+  if (!j) return null;
+  const uncertain = j.words.filter((w) => w.p >= 0.3 && w.p < 0.7).length;
+  const extreme = j.words.filter((w) => w.p <= 0.1 || w.p >= 0.9).length;
+  return { uncertain, extreme, n: j.words.length };
+}
+
+function renderCompare() {
+  const on = compareBox.checked && config?.baseline;
+  compareStrip.hidden = !on || !lastPreview;
+  if (compareStrip.hidden) return;
+  compareStrip.replaceChildren();
+  const row = (who: string, text: string) => {
+    const r = document.createElement("div"); r.className = "rowc";
+    const w = document.createElement("span"); w.className = "who"; w.textContent = who;
+    const t = document.createElement("span"); t.innerHTML = text; r.append(w, t); compareStrip.append(r);
+  };
+  const jb = bandCounts(lastPreview)!;
+  row("Jev", `<b>${Math.round(lastPreview!.latencyMs)} ms</b> · <b>$${lastPreview!.costUsd.toFixed(5)}</b> · ${jb.uncertain} word${jb.uncertain === 1 ? "" : "s"} in the uncertain band, ${jb.extreme} at or beyond 0.10 / 0.90`);
+  const name = modelName(config!.baseline);
+  if (baselineState === "waiting") row(name, `<b>waiting…</b> one call, same question, all 25 words`);
+  else if (baselineState === "error") row(name, `<span class="err">${baselineError}</span>`);
+  else if (lastBaseline) {
+    const bb = bandCounts(lastBaseline)!;
+    row(name, `<b>${Math.round(lastBaseline.latencyMs)} ms</b> · <b>$${lastBaseline.costUsd.toFixed(5)}</b> · ${bb.uncertain} word${bb.uncertain === 1 ? "" : "s"} in the uncertain band, ${bb.extreme} at or beyond 0.10 / 0.90`);
+    const speed = lastBaseline.latencyMs / Math.max(1, lastPreview!.latencyMs);
+    const cost = lastBaseline.costUsd / Math.max(1e-9, lastPreview!.costUsd);
+    const v = document.createElement("div"); v.className = "verdict";
+    v.textContent = `Same clue, same board, same question. Jev answered ${speed.toFixed(1)}× faster at ${cost.toFixed(0)}× lower cost.` + (jb.uncertain > bb.uncertain ? ` Where Jev says "not sure", ${name} picks a side.` : "");
+    compareStrip.append(v);
+  }
+}
+
 function renderStatus() {
   if (!game) return;
   const last = game.turns[game.turns.length - 1];
@@ -138,7 +195,7 @@ function renderStatus() {
   }
 }
 
-function render() { renderBoard(); renderMeter(); renderLog(); renderStatus(); }
+function render() { renderBoard(); renderMeter(); renderLog(); renderStatus(); renderCompare(); }
 
 function shareUrl(): string {
   const u = new URL(location.href);
@@ -151,7 +208,7 @@ async function newGame(seed?: number) {
   busy = true;
   try {
     game = await api<GameView>("/api/games", { mode, seed });
-    heat = null; lastPreview = null;
+    heat = null; lastPreview = null; baselineHeat = null; lastBaseline = null; baselineState = "off"; feedEl.hidden = true;
     clueInput.value = ""; replayBtn.disabled = true; note(replayNote, ""); note(previewNote, mode === "spymaster" ? "The board lights up as you type: one request, 25 nouls and a choice, about 300 ms." : "");
     seedInput.value = String(game.seed);
     history.replaceState(null, "", shareUrl());
@@ -164,10 +221,11 @@ let previewSeq = 0;
 function schedulePreview() {
   window.clearTimeout(previewTimer);
   const clue = clueInput.value.trim();
-  if (!clue || !game || game.status !== "playing") { heat = null; lastPreview = null; replayBtn.disabled = true; renderBoard(); return; }
+  if (!clue || !game || game.status !== "playing") { heat = null; lastPreview = null; baselineHeat = null; lastBaseline = null; baselineState = "off"; replayBtn.disabled = true; renderBoard(); renderCompare(); return; }
   previewTimer = window.setTimeout(async () => {
     const seq = ++previewSeq;
     const started = performance.now();
+    if (compareBox.checked && config?.baseline) void fetchBaseline(clue, seq);
     try {
       const r = await api<{ illegal: string | null; judgment: Judgment; meter: GameView["meter"] }>(`/api/games/${game!.id}/preview`, { clue });
       if (seq !== previewSeq) return;
@@ -178,9 +236,22 @@ function schedulePreview() {
         note(previewNote, `${Math.round(performance.now() - started)} ms round trip, ${r.judgment.inputTokens} tokens, $${r.judgment.costUsd.toFixed(5)}. Jev would guess: ${would.length ? would.join(", ") : "nothing clears 0.70"}.`);
         replayBtn.disabled = false;
       }
-      renderBoard(); renderMeter();
+      renderBoard(); renderMeter(); renderCompare();
     } catch (e) { if (seq === previewSeq) note(previewNote, (e as Error).message, true); }
   }, 350);
+}
+
+async function fetchBaseline(clue: string, seq: number): Promise<void> {
+  baselineState = "waiting"; baselineHeat = null; lastBaseline = null; renderCompare();
+  try {
+    const r = await api<{ judgment: Judgment; meter: GameView["meter"] }>(`/api/games/${game!.id}/baseline`, { clue });
+    if (seq !== previewSeq) return;
+    lastBaseline = r.judgment; baselineHeat = heatFrom(r.judgment); baselineState = "done"; game!.meter = r.meter;
+  } catch (e) {
+    if (seq !== previewSeq) return;
+    baselineState = "error"; baselineError = (e as Error).message;
+  }
+  renderBoard(); renderMeter(); renderCompare();
 }
 
 async function onReplay() {
@@ -193,8 +264,17 @@ async function onReplay() {
     let max = 0, maxWord = "";
     for (const w of r.judgment.words) { const d = Math.abs(w.p - (before.get(w.word) ?? 0)); if (d > max) { max = d; maxWord = w.word; } }
     lastPreview = r.judgment; heat = heatFrom(r.judgment); game.meter = r.meter;
-    note(replayNote, `Same clue, fresh request: the largest change across 25 words was ${max.toFixed(3)}${maxWord ? ` (${maxWord})` : ""}.`);
-    renderBoard(); renderMeter();
+    let text = `Same clue, fresh request: Jev's largest change across 25 words was ${max.toFixed(3)}${maxWord ? ` (${maxWord})` : ""}.`;
+    if (compareBox.checked && config?.baseline && lastBaseline) {
+      const prev = new Map(lastBaseline.words.map((w) => [w.word, w.p]));
+      const rb = await api<{ judgment: Judgment; meter: GameView["meter"] }>(`/api/games/${game.id}/baseline`, { clue: lastPreview.clue });
+      let bmax = 0, bword = "";
+      for (const w of rb.judgment.words) { const d = Math.abs(w.p - (prev.get(w.word) ?? 0)); if (d > bmax) { bmax = d; bword = w.word; } }
+      lastBaseline = rb.judgment; baselineHeat = heatFrom(rb.judgment); game.meter = rb.meter;
+      text += ` ${modelName(config.baseline)} at temperature 0: ${bmax.toFixed(3)}${bword ? ` (${bword})` : ""}.`;
+    }
+    note(replayNote, text);
+    renderBoard(); renderMeter(); renderCompare();
   } catch (e) { note(replayNote, (e as Error).message, true); }
   finally { replayBtn.disabled = false; }
 }
@@ -224,12 +304,54 @@ async function onGive() {
   finally { busy = false; render(); }
 }
 
+interface FeedItem { clue: string; number: number; rejected: string | null; targets: string[]; risks: string[]; top: { word: string; p: number } | null; judged: number; proposed: number; round: number }
+
+function renderFeed(items: FeedItem[], total: number) {
+  feedEl.hidden = false;
+  feedEl.replaceChildren();
+  const count = document.createElement("div"); count.className = "count";
+  const last = items[items.length - 1];
+  count.textContent = last ? `Jev has judged ${last.judged} of ${last.proposed} candidates, 25 words each` : `Proposing ${total} candidate clues…`;
+  const ul = document.createElement("ul");
+  for (const it of items.slice(-10).reverse()) {
+    const li = document.createElement("li"); li.className = it.rejected ? "" : "ok";
+    const cl = document.createElement("span"); cl.className = "cl"; cl.textContent = it.clue.toUpperCase();
+    const why = document.createElement("span"); why.className = "why";
+    why.textContent = it.rejected ? `  rejected: ${it.rejected}` : `  ${it.number} → ${it.targets.join(", ")}${it.risks.length ? `  (risk: ${it.risks.join(", ")})` : ""}`;
+    li.append(cl, why); ul.append(li);
+  }
+  feedEl.append(count, ul);
+}
+
 async function onAsk() {
   if (!game || busy) return;
-  busy = true; renderStatus(); setStatus("Jev is thinking: proposing, judging every candidate against every word, picking…");
+  busy = true; renderStatus(); setStatus("Jev is thinking…");
+  const items: FeedItem[] = [];
+  renderFeed(items, 0);
   try {
-    const r = await api<{ turn: TurnView; game: GameView }>(`/api/games/${game.id}/ask`);
-    game = r.game; heat = null;
+    const res = await fetch(`/api/games/${game.id}/ask`, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: "{}" });
+    if (!res.ok || !res.body) { const text = await res.text(); let msg = `HTTP ${res.status}`; try { msg = (JSON.parse(text) as { error?: string }).error ?? msg; } catch { /* plain */ } throw new Error(msg); }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finished = false;
+    while (!finished) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf("\n\n")) >= 0) {
+        const chunk = buffer.slice(0, idx); buffer = buffer.slice(idx + 2);
+        const ev = chunk.match(/^event: (\w+)/m)?.[1];
+        const data = chunk.match(/^data: (.*)$/m)?.[1];
+        if (!ev || !data) continue;
+        const payload = JSON.parse(data);
+        if (ev === "start") renderFeed(items, payload.candidates as number);
+        else if (ev === "candidate") { items.push(payload as FeedItem); renderFeed(items, 0); }
+        else if (ev === "done") { game = (payload as { game: GameView }).game; heat = null; finished = true; }
+        else if (ev === "error") throw new Error((payload as { error: string }).error);
+      }
+    }
   } catch (e) { setStatus((e as Error).message); }
   finally { busy = false; render(); }
 }
@@ -278,8 +400,28 @@ $("card").addEventListener("click", () => {
   drawCard(canvas, game, last, shareUrl());
   download(canvas, `jev-codenames-${game.seed}.png`);
 });
+compareBox.addEventListener("change", () => {
+  if (compareBox.checked && lastPreview && config?.baseline) void fetchBaseline(lastPreview.clue, previewSeq);
+  else { baselineHeat = null; lastBaseline = null; baselineState = "off"; renderBoard(); renderCompare(); }
+});
 $("copy-link").addEventListener("click", async () => { try { await navigator.clipboard.writeText(shareUrl()); setStatus("Link copied."); } catch { setStatus(shareUrl()); } });
 
+async function loadConfig(): Promise<Config | null> {
+  let loaded: Config | null = null;
+  try {
+    const res = await fetch("/api/config");
+    loaded = (await res.json()) as Config;
+  } catch { loaded = null; }
+  if (loaded?.baseline) { compareWrap.hidden = false; $("baseline-name").textContent = modelName(loaded.baseline); }
+  if (loaded) {
+    const e = loaded.eval;
+    $("stat").innerHTML = `On <b>${e.clues}</b> real human games, Jev's top pick was the human's actual guess <b>${Math.round(e.guessTop1 * 100)}%</b> of the time; chance is <b>${Math.round(e.chance * 100)}%</b>. Repeat the same clue and its numbers move by about <b>${e.repeatStd.toFixed(2)}</b>. <a href="https://github.com/danielhirt/jev-lab/tree/main/packages/codenames#phase-0-results-2026-09-19-jev-1130">How it was measured</a>.`;
+  }
+  return loaded;
+}
+
 const params = new URLSearchParams(location.search);
+config = await loadConfig();
+if (params.get("compare") === "1" && config?.baseline) compareBox.checked = true;
 if (params.get("mode") === "guesser") { mode = "guesser"; $("mode-spymaster").setAttribute("aria-selected", "false"); $("mode-guesser").setAttribute("aria-selected", "true"); }
 void newGame(Number(params.get("seed")) || undefined);

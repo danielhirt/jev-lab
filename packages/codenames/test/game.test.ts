@@ -92,6 +92,16 @@ describe("spymasterTurn", () => {
     expect(turn.proposer.costUsd).toBeCloseTo(0.002);
     expect(turn.proposed).toEqual(["grave", "dust", "river"]);
   });
+
+  test("reports each verdict as it lands", async () => {
+    const judge = new TableJudge({ river: { bank: 0.9, flow: 0.85 } });
+    const seen: string[] = [];
+    await spymasterTurn(board, "red", new ListProposer(["river", "cash", "dust"]), judge, DEFAULT_THRESHOLDS, {
+      candidates: 3, concurrency: 1, rounds: 1,
+      onCandidate: (e, progress) => seen.push(`${e.clue}:${e.rejected ? "x" : e.number}:${progress.judged}/${progress.proposed}`),
+    });
+    expect(seen).toEqual(["river:2:1/3", "cash:x:2/3", "dust:x:3/3"]);
+  });
 });
 
 describe("applyGuesses", () => {

@@ -42,6 +42,8 @@ export interface TurnOptions {
   concurrency: number;
   /** Proposal rounds before passing. A second round asks for different clues; the policy never loosens. */
   rounds?: number;
+  /** Called with each candidate's evaluation as soon as Jev answers, in completion order. */
+  onCandidate?: (evaluation: ClueEvaluation, progress: { judged: number; proposed: number; round: number }) => void;
 }
 
 export const DEFAULT_TURN_OPTIONS: TurnOptions = { candidates: 30, concurrency: 8, rounds: 2 };
@@ -98,9 +100,15 @@ export async function spymasterTurn(
     }
 
     const started = performance.now();
-    const judgments = await mapLimit(legal, options.concurrency, (clue) => judge.judge(clue, visible));
+    let judged = 0;
+    const evaluations = await mapLimit(legal, options.concurrency, async (clue) => {
+      const evaluation = evaluateClue(await judge.judge(clue, visible), board, team, thresholds);
+      judged += 1;
+      options.onCandidate?.(evaluation, { judged, proposed: proposed.length, round });
+      return evaluation;
+    });
     judgeMs += performance.now() - started;
-    candidates.push(...judgments.map((j) => evaluateClue(j, board, team, thresholds)));
+    candidates.push(...evaluations);
     chosen = pickClue(candidates);
   }
   candidates.sort((a, b) => b.score - a.score);

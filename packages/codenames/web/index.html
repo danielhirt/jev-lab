@@ -14,6 +14,7 @@
     <div>
       <h1>Jev plays Codenames</h1>
       <p class="tag">A spymaster that knows what it doesn't know. Every card shows the probability TypeSafe's Jev assigned; the thresholds decide the play.</p>
+      <p class="stat" id="stat"></p>
     </div>
     <div class="controls">
       <div class="seg" role="tablist" aria-label="Mode">
@@ -48,6 +49,8 @@
           <button id="give" class="primary">Give clue</button>
         </div>
         <p id="preview-note" class="note">The board lights up as you type: one request, 25 nouls and a choice, about 300 ms.</p>
+        <label class="toggle" id="compare-wrap" hidden><input type="checkbox" id="compare"> Ask <span id="baseline-name">a chat model</span> the same question, side by side</label>
+        <div id="compare-strip" class="compare" hidden></div>
         <button id="replay" class="ghost" disabled>Replay the judgment</button>
         <p id="replay-note" class="note"></p>
       </div>
@@ -56,6 +59,7 @@
         <button id="ask" class="primary">Ask Jev for a clue</button>
         <div id="open-clue" class="open-clue" hidden></div>
         <button id="pass" class="ghost" hidden>End turn</button>
+        <div id="feed" class="feed" hidden></div>
         <p class="note">Jev's probabilities stay hidden until your turn ends, then the board shows what it was thinking.</p>
       </div>
 

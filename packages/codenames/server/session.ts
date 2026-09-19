@@ -5,7 +5,7 @@
  * HTTP layer in index.ts only parses requests and calls these.
  */
 import { newBoard, remaining, reveal, unrevealed } from "../src/board";
-import { applyGuesses, spymasterTurn, type Proposer } from "../src/game";
+import { applyGuesses, spymasterTurn, type Proposer, type TurnOptions } from "../src/game";
 import type { Judge } from "../src/judge";
 import { clueRejection } from "../src/legality";
 import type { Board, CardKind, Judgment, Team, Thresholds } from "../src/types";
@@ -21,6 +21,10 @@ export interface Meter {
   jevCostUsd: number;
   proposerCostUsd: number;
   jevMs: number;
+  /** The comparison arm, when a chat model is asked the same question. */
+  baselineRequests: number;
+  baselineCostUsd: number;
+  baselineMs: number;
 }
 
 export interface TurnView {
@@ -83,7 +87,7 @@ export function newGame(id: string, mode: Mode, seed: number): Game {
   return {
     id, mode, seed, board, team: board.startingTeam, turns: [], open: null,
     status: "playing", reason: "",
-    meter: { jevRequests: 0, pairs: 0, jevCostUsd: 0, proposerCostUsd: 0, jevMs: 0 },
+    meter: { jevRequests: 0, pairs: 0, jevCostUsd: 0, proposerCostUsd: 0, jevMs: 0, baselineRequests: 0, baselineCostUsd: 0, baselineMs: 0 },
     createdAt: now, updatedAt: now,
   };
 }
@@ -147,6 +151,19 @@ export async function preview(game: Game, clue: string, judge: Judge): Promise<{
   return { judgment, illegal: null };
 }
 
+/** Spymaster mode, comparison arm: the same clue judged by a chat model. Never drives play. */
+export async function previewBaseline(game: Game, clue: string, baseline: Judge): Promise<Judgment> {
+  requirePlaying(game, "spymaster");
+  const words = unrevealed(game.board).map((c) => c.word);
+  const illegal = clueRejection(clue, words);
+  if (illegal) throw new GameError(`illegal clue: ${illegal}`);
+  const judgment = await baseline.judge(clue, words);
+  game.meter.baselineRequests += 1;
+  game.meter.baselineCostUsd += judgment.costUsd;
+  game.meter.baselineMs += judgment.latencyMs;
+  return judgment;
+}
+
 /** Spymaster mode: the person commits a clue and a number; Jev guesses. */
 export async function giveClue(game: Game, clue: string, number: number, judge: Judge, thresholds: Thresholds): Promise<TurnView> {
   requirePlaying(game, "spymaster");
@@ -172,10 +189,17 @@ export async function giveClue(game: Game, clue: string, number: number, judge: 
 }
 
 /** Guesser mode: Jev gives a clue. The heat stays hidden until the person's turn ends. */
-export async function askClue(game: Game, proposer: Proposer, judge: Judge, thresholds: Thresholds, candidates: number): Promise<TurnView> {
+export async function askClue(
+  game: Game,
+  proposer: Proposer,
+  judge: Judge,
+  thresholds: Thresholds,
+  candidates: number,
+  onCandidate?: TurnOptions["onCandidate"],
+): Promise<TurnView> {
   requirePlaying(game, "guesser");
   if (game.open) throw new GameError("finish guessing first");
-  const turn = await spymasterTurn(game.board, game.team, proposer, judge, thresholds, { candidates, concurrency: 8, rounds: 2 });
+  const turn = await spymasterTurn(game.board, game.team, proposer, judge, thresholds, { candidates, concurrency: 8, rounds: 2, onCandidate });
   const judgments = turn.candidates.map((c) => c.judgment);
   addJev(game, judgments, turn.judge.latencyMs);
   game.meter.proposerCostUsd += turn.proposer.costUsd;
