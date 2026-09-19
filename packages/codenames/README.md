@@ -22,7 +22,9 @@ One cooperative board: you and Jev against 9 agents, 15 bystanders, and 1 assass
 - **I give clues, Jev guesses.** Type a clue and the board lights up as you type: one request, 25 nouls and a choice, about 300 ms. The note under the input says what Jev would guess. "Replay the judgment" sends the same clue again and reports the largest change across the 25 words, which is how consistency is shown rather than claimed.
 - **Jev gives clues, I guess.** Claude proposes candidate words from the key, code drops illegal ones, Jev judges every candidate against every word, code picks. The pipeline strip shows each step with its count, time, and cost. Jev's probabilities stay hidden until your turn ends, then the board shows what it was thinking and which words it meant.
 
-![Spymaster mode: the board as a probability heatmap for the clue HOSPITAL](docs/spymaster.png)
+![Typing a clue: HORSE lights up the assassin, CANYON reaches VALLEY and leaves DESERT in the uncertain band](docs/spymaster.gif)
+
+A 48-second recording of both modes is in [`docs/codenames.mp4`](docs/codenames.mp4): a tempting clue that reaches the assassin, a clue whose number Jev refuses to over-guess, a replay showing the numbers hold, and Jev giving a clue of its own. It was captured with Playwright against the live API on seed 7 (`docs/record.mjs`), so anyone can replay the same board.
 
 Environment: `PORT`, `CODENAMES_STYLE` (`full` or `compact` question wording), `JEV_MODEL`, `PROPOSER_MODEL` (default `claude-opus-5`), `TRUST_PROXY=1` to read `X-Forwarded-For` behind a reverse proxy. Games live in memory for two hours; per-IP token buckets limit previews, new boards, and Jev spymaster turns separately. Keys never reach the browser.
 
