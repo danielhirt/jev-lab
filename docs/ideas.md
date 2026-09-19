@@ -54,3 +54,38 @@ Jev does not know Balatro's rules. The state has to carry each joker's full text
 **Measure.** Run fixed seeds. Compare ante reached and win rate for four players: random, greedy (always the highest-scoring play, always the cheapest joker), Jev, and Haiku 4.5 given the same questions through `compare`. Log every decision with its probabilities so a lost run can be traced to the judgment that lost it. Cost per run should be well under a cent; record it.
 
 **Why it is worth the time.** It tests long-horizon play built from single-step judgments, which the prose scenarios in this lab cannot. It also yields a public demo that people will watch.
+
+**Assessment 2026-09-19.** A good portfolio piece, a weak capability demo. Cost, latency and repeatability are invisible in a turn-based game. Most of the judgment calls above are expected-value arithmetic (draw odds times payoff against hands left, marginal chips and mult over the next N hands) and belong in code by this lab's own rules. The one Jev-shaped question, joker synergy, is multi-hop ("adds mult per club held, deck is club-heavy, the other joker retriggers held cards"), which section 7 of how-jev-works lists as a bad fit. An LLM-only arm will likely win on ante reached, the only axis a viewer sees, and seed variance means separating arms needs hundreds of runs through a Lua mod. If built anyway: an LLM states a build intent once per ante, Jev scores each shop item against `plan.intent` in one hop (policy in the state), code does every number, and the HUD shows the probabilities and the run's total cost. Run the offline decision-level eval (logged shop and discard decisions, a lookahead bot as ground truth, Jev vs Haiku vs greedy on accuracy, Brier score, stability and cost) before any live player. Idea 3 is the recommended demo instead.
+
+## 3. Jev as Codenames spymaster
+
+Added 2026-09-19 as the shareable demo in place of idea 2. The selection rule: pick a game where one of Jev's properties is the mechanic the viewer sees. Calibration as visible risk, fan-out as visible breadth, cost as visible scale. Codenames maps all three.
+
+**Split**
+
+| Code | LLM | Jev |
+| --- | --- | --- |
+| Hold the board: 25 words, each word's team, revealed state | Propose candidate clues for the current friendly words (tens to hundreds per turn) | For each candidate clue, 25 nouls in one call: does `clue` relate to `board[i]`? |
+| Score each clue: count friendly words above the act threshold, require assassin below a hard floor and opponent words below a softer one | Nothing else; it never sees the scores | Guesser mode: the same 25 nouls over the opponent's clue, ranked |
+| Pick the clue and number, log every probability, render the heatmap | | |
+
+The scoring rule is the whole design. A clue is eligible only if `P(assassin)` is below a floor set by how costly that mistake is (losing the game), and it is ranked by how many friendly words sit above the act threshold. The uncertain band from section 5 of how-jev-works becomes a game rule: a word between 0.3 and 0.7 is not counted toward the clue's number.
+
+**Why each property shows**
+
+- **Fan-out.** 25 judgments per call at one latency; 200 candidate clues is 5,000 judgments for about a cent, in seconds. Per-judgment chat calls cannot do this live.
+- **Calibration.** The assassin is a hard threshold on a probability. A spymaster that knows what it does not know never gives a clue sitting at 0.4 on the black word. The heatmap after each clue makes the number visible.
+- **Consistency.** Same board, same clue, same numbers (std ~0.01 measured), so a viewer can argue with a specific decision and it replays.
+- **Interactive.** People play as guessers against it in a browser. That spreads better than a video of a bot.
+
+**What could sink it**
+
+- Jev is unmeasured on word association. Clue relatedness is fuzzier than the policy checks in this lab's scenarios, and it reads literally (the paraphrase finding). The instruction has to define "relate" the way Codenames players use it: a competent guesser would connect them, not a dictionary would.
+- Multi-word sense. "Bank" against RIVER and MONEY is the whole game; a noul per word handles it (each is an independent judgment), but nobody has checked whether Jev's numbers track human guessing.
+- A clue that is a substring or inflection of a board word is illegal; that is a code check, not a question.
+
+**Measure.** Offline first, before any UI. Public Codenames datasets from the Codenames AI research line carry human clues with the words guessed for them. For each clue, ask the 25 nouls and check (a) whether the words humans guessed rank above the words they did not, (b) Brier score against guessed or not, (c) std across 20 repeats on the assassin word, (d) the same via `compare` against Haiku 4.5 at temperature 0, with cost and latency. The gate: better than chance on (a) by a clear margin, and an assassin threshold that holds across repeats.
+
+**First experiment.** Write `examples/codenames.json` with one board, one clue, and 25 nouls; run `bun run lab ask examples/codenames.json -n 20` for stability, then `perturb` for the literal-reading risk. If that holds, a `codenames` scenario in `src/scenarios.ts` that loads boards and clues from a dataset file and reports the four measures above.
+
+**Alternatives considered** (kept as fallbacks): a "beat the gatekeeper" jailbreak game, guardrails made playable Gandalf-style with the tripping probabilities shown after each attempt; and a split-screen live firehose classifier, Jev against a chat model with backlog and cost meters, which is the clearest 30-second clip but a dashboard rather than a game.
