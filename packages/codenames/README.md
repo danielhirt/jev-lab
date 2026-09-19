@@ -9,6 +9,8 @@ A Codenames spymaster and guesser built on TypeSafe's Jev, through the direct AP
 | Consistency | Same board, same clue, same numbers. Boards are seeded so any turn replays. |
 | Code owns the workflow | Code deals the board, checks clue legality, sets every threshold, and picks the clue. Jev only answers "does this clue reach this word". |
 
+Picking this up? Read [`HANDOFF.md`](HANDOFF.md) first: current state, what is unverified, and the steps left to finish the demo.
+
 ## The web app
 
 ```sh
