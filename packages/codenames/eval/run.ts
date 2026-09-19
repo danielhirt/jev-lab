@@ -17,6 +17,7 @@ import { CachingJudge, TypeSafeJudge, type Judge } from "../src/judge";
 import type { QuestionStyle } from "../src/questions";
 import { readRows, type ClueRow } from "./dataset";
 import { auc, brier, mean, median, percentile, std } from "./metrics";
+import { mapLimit } from "../src/util";
 
 interface Args { path: string; n: number; repeats: number; repeatRows: number; seed: number; concurrency: number; model: string; style: QuestionStyle }
 
@@ -49,15 +50,6 @@ function sample<T>(items: readonly T[], n: number, seed: number): T[] {
   const pool = items.slice();
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [pool[i], pool[j]] = [pool[j]!, pool[i]!]; }
   return pool.slice(0, n);
-}
-
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (t: T, i: number) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) { const i = next++; out[i] = await fn(items[i]!, i); }
-  }));
-  return out;
 }
 
 const fmt = (x: number | null | undefined, d = 3) => (x === null || x === undefined || Number.isNaN(x) ? "n/a" : x.toFixed(d));
