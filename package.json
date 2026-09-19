@@ -1,13 +1,17 @@
 {
   "name": "jev-lab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
+  "workspaces": ["packages/*"],
   "scripts": {
-    "lab": "bun run src/cli.ts",
-    "typecheck": "bunx tsc --noEmit"
+    "lab": "bun run --cwd packages/lab lab",
+    "codenames": "bun run --cwd packages/codenames cli",
+    "typecheck": "bun run --cwd packages/lab typecheck && bun run --cwd packages/codenames typecheck",
+    "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
   }
 }

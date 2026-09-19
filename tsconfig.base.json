@@ -4,9 +4,9 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
-    "types": ["bun-types"],
+    "types": ["bun"],
     "skipLibCheck": true
-  },
-  "include": ["src"]
+  }
 }

@@ -1,0 +1,10 @@
+{
+  "name": "@jev-lab/lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lab": "bun run src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

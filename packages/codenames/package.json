@@ -1,0 +1,15 @@
+{
+  "name": "@jev-lab/codenames",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cli": "bun run src/cli.ts",
+    "eval": "bun run eval/run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "^0.6.0"
+  }
+}
