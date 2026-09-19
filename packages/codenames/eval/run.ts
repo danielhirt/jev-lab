@@ -14,10 +14,11 @@
  * plus median latency and cost per request. Judgments are cached in data/cache-*.json so a rerun is free.
  */
 import { CachingJudge, TypeSafeJudge, type Judge } from "../src/judge";
+import type { QuestionStyle } from "../src/questions";
 import { readRows, type ClueRow } from "./dataset";
 import { auc, brier, mean, median, percentile, std } from "./metrics";
 
-interface Args { path: string; n: number; repeats: number; repeatRows: number; seed: number; concurrency: number; model: string }
+interface Args { path: string; n: number; repeats: number; repeatRows: number; seed: number; concurrency: number; model: string; style: QuestionStyle }
 
 function parseArgs(argv: string[]): Args {
   const flag = (name: string, fallback: string) => {
@@ -29,7 +30,7 @@ function parseArgs(argv: string[]): Args {
     if (argv[i]!.startsWith("--")) i++;
     else path ??= argv[i];
   }
-  if (!path) throw new Error("usage: bun run eval/run.ts <rows.jsonl> [--n 100] [--repeats 20] [--repeat-rows 10] [--seed 1] [--concurrency 4] [--model jev-latest]");
+  if (!path) throw new Error("usage: bun run eval/run.ts <rows.jsonl> [--n 100] [--repeats 20] [--repeat-rows 10] [--seed 1] [--concurrency 4] [--model jev-latest] [--style full|compact]");
   return {
     path,
     n: Number(flag("n", "100")),
@@ -38,6 +39,7 @@ function parseArgs(argv: string[]): Args {
     seed: Number(flag("seed", "1")),
     concurrency: Number(flag("concurrency", "4")),
     model: flag("model", "jev-latest"),
+    style: flag("style", "full") === "compact" ? "compact" : "full",
   };
 }
 
@@ -63,8 +65,8 @@ const fmt = (x: number | null | undefined, d = 3) => (x === null || x === undefi
 async function main() {
   const args = parseArgs(Bun.argv.slice(2));
   const rows = sample(await readRows(args.path), args.n, args.seed);
-  const live: Judge = new TypeSafeJudge(undefined, args.model);
-  const judge = new CachingJudge(live, `data/cache-${args.model}.json`);
+  const live: Judge = new TypeSafeJudge(undefined, args.model, args.style);
+  const judge = new CachingJudge(live, `data/cache-${args.model}-${args.style}.json`);
 
   const guessAuc: number[] = [], targetAuc: number[] = [], brierPairs: [number, boolean][] = [];
   const assassinP: number[] = [], latencies: number[] = [], costs: number[] = [];
@@ -120,7 +122,8 @@ async function main() {
     ["repeat std, assassin (mean / max)", args.repeats > 1 ? `${fmt(mean(assassinStd), 4)} / ${fmt(Math.max(...assassinStd), 4)}` : "skipped"],
     ["latency ms median / p90", `${fmt(median(latencies), 0)} / ${fmt(percentile(latencies, 0.9), 0)}`],
     ["cost per request USD", fmt(mean(costs), 6)],
-    ["model", judged[0]?.model ?? args.model],
+    ["model / style", `${judged[0]?.model ?? args.model} / ${args.style}`],
+    ["input tokens per request (mean)", fmt(mean(judged.map((j) => j.inputTokens)), 0)],
   ];
   console.log("| metric | value |\n| --- | --- |");
   for (const [k, v] of table) console.log(`| ${k} | ${v} |`);

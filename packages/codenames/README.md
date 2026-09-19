@@ -63,7 +63,27 @@ bun run eval/salt.ts /tmp/salt-codenames data/salt-duet.jsonl
 bun run eval/run.ts data/salt-duet.jsonl --n 100 --repeats 20 --repeat-rows 10
 ```
 
-Pass criteria: guess AUC and target AUC well above 0.5 (a random ranker scores 0.5), top-1 agreement with the human guess well above the 1-in-25 base rate, and a repeat std on the assassin small enough that `assassinMax` holds across repeats. Judgments cache in `data/cache-<model>.json`, so reruns with different thresholds are free; the stability repeats bypass the cache on purpose.
+Pass criteria, set before the run: guess AUC and target AUC well above 0.5 (a random ranker scores 0.5), top-1 agreement with the human guess well above the 1-in-25 base rate, and a repeat std on the assassin small enough that `assassinMax` holds across repeats. Judgments cache in `data/cache-<model>-<style>.json`, so reruns with different thresholds are free; the stability repeats bypass the cache on purpose.
+
+## Phase 0 results (2026-09-19, jev-1.13.0)
+
+100 human clues sampled with seed 1, 20 repeats on 10 of them, both question wordings. The gate passed.
+
+| metric | full wording | compact wording |
+| --- | --- | --- |
+| guess AUC (noul) | 0.941 | 0.940 |
+| guess top-1, noul argmax | 0.64 | 0.64 |
+| guess top-1, choice argmax | 0.63 | 0.63 |
+| target AUC (noul) | 0.953 | 0.952 |
+| Brier vs guessed | 0.069 | 0.079 |
+| assassin noul mean / p90 | 0.215 / 0.420 | 0.244 / 0.430 |
+| repeat std, all words | 0.012 | 0.015 |
+| repeat std, assassin, mean / max | 0.011 / 0.018 | 0.012 / 0.021 |
+| latency ms, median / p90 | 298 / 363 | 265 / 330 |
+| input tokens per request | 3,247 | 1,537 |
+| cost per request | $0.000136 | $0.000064 |
+
+Reading it: a random ranker scores 0.5 AUC and 0.04 top-1, so Jev's per-word probability tracks both the giver's intent and the guesser's actual pick, and its single most likely word is the human's guess two times in three. Repeat std near 0.01 means a threshold decision moves only on words that sit within a hundredth of it. The assassin numbers describe the human clues, not Jev: Duet keys carry three assassins and human givers take real risks with them, so `assassinMax` at 0.10 would veto some clues people actually gave. That is the intended behavior for a spymaster that never loses on the assassin, and the eval is the place to tune it. `full` stays the default for its better calibration; `compact` is the flag to flip when cost or latency matters more.
 
 ## Trying it
 

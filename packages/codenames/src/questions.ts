@@ -16,19 +16,26 @@ export function judgeState(clue: string, words: readonly string[]) {
   return { game: GAME_NOTE, clue: clue.toUpperCase(), board: words.map((w) => w.toUpperCase()) };
 }
 
-export function judgeQuestions(clue: string, words: readonly string[]): Questions {
+/** `full` spells the criteria out on every noul; `compact` relies on the note in the state and costs fewer tokens. */
+export type QuestionStyle = "full" | "compact";
+
+export function judgeQuestions(clue: string, words: readonly string[], style: QuestionStyle = "full"): Questions {
   const questions: Questions = {};
   const CLUE = clue.toUpperCase();
   words.forEach((raw, i) => {
     const word = raw.toUpperCase();
-    questions[word] = {
-      type: "noul",
-      instructions: `Would a typical guesser connect the clue \`clue\` ("${CLUE}") to the board word \`board[${i}]\` ("${word}")?`,
-      criteria: {
-        true: `A typical player would readily link "${CLUE}" and "${word}" by meaning, category, a common phrase, or a strong everyday association.`,
-        false: `A typical player would not think of "${word}" on hearing "${CLUE}"; any link is absent, a stretch, or needs specialist knowledge.`,
-      },
-    };
+    const instructions = `Would a typical guesser connect the clue \`clue\` ("${CLUE}") to the board word \`board[${i}]\` ("${word}")?`;
+    questions[word] =
+      style === "compact"
+        ? { type: "noul", instructions }
+        : {
+            type: "noul",
+            instructions,
+            criteria: {
+              true: `A typical player would readily link "${CLUE}" and "${word}" by meaning, category, a common phrase, or a strong everyday association.`,
+              false: `A typical player would not think of "${word}" on hearing "${CLUE}"; any link is absent, a stretch, or needs specialist knowledge.`,
+            },
+          };
   });
   questions.first = {
     type: "choice",

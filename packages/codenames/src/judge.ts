@@ -1,5 +1,5 @@
 import { TypeSafeClient } from "@typesafe-ai/sdk";
-import { judgeQuestions, judgeState } from "./questions";
+import { judgeQuestions, judgeState, type QuestionStyle } from "./questions";
 import type { Judgment, WordJudgment } from "./types";
 
 /** jev-1.13 list price: $0.042 per million input tokens, output free. */
@@ -14,6 +14,7 @@ export class TypeSafeJudge implements Judge {
   constructor(
     private readonly client: TypeSafeClient = new TypeSafeClient(),
     private readonly model: string = DEFAULT_MODEL,
+    private readonly style: QuestionStyle = "full",
   ) {}
 
   async judge(clue: string, words: readonly string[]): Promise<Judgment> {
@@ -21,7 +22,7 @@ export class TypeSafeJudge implements Judge {
     const result = await this.client.systemOne({
       model: this.model,
       state: judgeState(clue, words),
-      questions: judgeQuestions(clue, words),
+      questions: judgeQuestions(clue, words, this.style),
     });
     const latencyMs = performance.now() - started;
     const first = result.answers["first"];
