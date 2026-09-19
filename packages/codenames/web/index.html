@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jev plays Codenames</title>
+  <meta name="description" content="A Codenames spymaster and guesser built on TypeSafe's Jev: every card shows the probability the model assigned, and the numbers decide the play.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23256abf'/%3E%3Crect x='6' y='6' width='9' height='9' rx='2' fill='%23fcfcfb'/%3E%3Crect x='17' y='6' width='9' height='9' rx='2' fill='%2386b6ef'/%3E%3Crect x='6' y='17' width='9' height='9' rx='2' fill='%2386b6ef'/%3E%3Crect x='17' y='17' width='9' height='9' rx='2' fill='%23fcfcfb'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.ts"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Jev plays Codenames</h1>
+      <p class="tag">A spymaster that knows what it doesn't know. Every card shows the probability TypeSafe's Jev assigned; the thresholds decide the play.</p>
+    </div>
+    <div class="controls">
+      <div class="seg" role="tablist" aria-label="Mode">
+        <button id="mode-spymaster" role="tab" aria-selected="true">I give clues, Jev guesses</button>
+        <button id="mode-guesser" role="tab" aria-selected="false">Jev gives clues, I guess</button>
+      </div>
+      <label class="seed">Seed <input id="seed" type="number" min="1" inputmode="numeric"></label>
+      <button id="new-game" class="primary">New board</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="board-wrap">
+      <div id="board" class="board" aria-live="polite"></div>
+      <div class="legend" id="legend">
+        <span class="sw agent"></span> agent
+        <span class="sw bystander"></span> bystander
+        <span class="sw assassin"></span> assassin
+        <span class="ramp"></span> probability 0 to 1
+        <span class="sw hatch"></span> uncertain band 0.30 to 0.70
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div id="status" class="status"></div>
+
+      <div id="spymaster-panel">
+        <label for="clue">Your clue</label>
+        <div class="row">
+          <input id="clue" type="text" autocomplete="off" spellcheck="false" placeholder="type a one-word clue" maxlength="30">
+          <input id="number" type="number" min="1" max="9" value="2" aria-label="number">
+          <button id="give" class="primary">Give clue</button>
+        </div>
+        <p id="preview-note" class="note">The board lights up as you type: one request, 25 nouls and a choice, about 300 ms.</p>
+        <button id="replay" class="ghost" disabled>Replay the judgment</button>
+        <p id="replay-note" class="note"></p>
+      </div>
+
+      <div id="guesser-panel" hidden>
+        <button id="ask" class="primary">Ask Jev for a clue</button>
+        <div id="open-clue" class="open-clue" hidden></div>
+        <button id="pass" class="ghost" hidden>End turn</button>
+        <p class="note">Jev's probabilities stay hidden until your turn ends, then the board shows what it was thinking.</p>
+      </div>
+
+      <div id="pipeline" class="pipeline" hidden></div>
+
+      <dl class="meter" id="meter"></dl>
+
+      <details class="policy">
+        <summary>The policy, in code</summary>
+        <p>A friendly word counts toward the clue's number at <b>0.70</b> or above. Between <b>0.30</b> and <b>0.70</b> it is uncertain and never counted. A clue is rejected if the assassin is above <b>0.10</b> or any bystander is above <b>0.40</b>. Jev only answers "does this clue reach this word"; everything else is code.</p>
+      </details>
+
+      <ol id="log" class="log"></ol>
+
+      <div id="result" class="result" hidden>
+        <p id="result-text"></p>
+        <div class="row">
+          <button id="card" class="primary">Download turn card</button>
+          <button id="copy-link" class="ghost">Copy link</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="foot">
+    <p>Built on <a href="https://docs.typesafe.ai">TypeSafe Jev</a> through the direct API. Code and the offline evaluation against 7,703 human turns: <a href="https://github.com/danielhirt/jev-lab/tree/main/packages/codenames">jev-lab/packages/codenames</a>.</p>
+  </footer>
+  <canvas id="share-canvas" width="1080" height="1080" hidden></canvas>
+</body>
+</html>

@@ -15,12 +15,30 @@ export function layout(startingTeam: Team): CardKind[] {
   ];
 }
 
-export function newBoard(seed: number, words: readonly string[] = WORDS): Board {
+/**
+ * Cooperative layout, for one team against the board: 9 agents to find, 15 bystanders, 1 assassin.
+ * Bystanders take the other team's kind so the scorer's opponent ceiling applies to all of them,
+ * which is the right rule when any wrong guess ends the turn.
+ */
+export function coopLayout(team: Team): CardKind[] {
+  const other: Team = team === "red" ? "blue" : "red";
+  return [...Array<CardKind>(9).fill(team), ...Array<CardKind>(15).fill(other), "assassin"];
+}
+
+export interface BoardOptions {
+  words?: readonly string[];
+  /** Cooperative single-team board; the starting team is the one to find. */
+  coop?: boolean;
+}
+
+export function newBoard(seed: number, options: BoardOptions | readonly string[] = {}): Board {
+  const opts: BoardOptions = Array.isArray(options) ? { words: options as readonly string[] } : (options as BoardOptions);
+  const words = opts.words ?? WORDS;
   if (new Set(words).size < BOARD_SIZE) throw new Error("word list needs 25 distinct words");
   const rand = mulberry32(seed);
   const startingTeam: Team = rand() < 0.5 ? "red" : "blue";
   const picked = shuffle(words, rand).slice(0, BOARD_SIZE);
-  const kinds = shuffle(layout(startingTeam), rand);
+  const kinds = shuffle(opts.coop ? coopLayout(startingTeam) : layout(startingTeam), rand);
   const cards: Card[] = picked.map((word, i) => ({ word, kind: kinds[i]!, revealed: false }));
   return { seed, startingTeam, cards };
 }

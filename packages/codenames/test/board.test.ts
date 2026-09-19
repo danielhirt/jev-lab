@@ -23,6 +23,18 @@ describe("newBoard", () => {
   });
 });
 
+describe("newBoard coop", () => {
+  test("deals 9 agents, 15 bystanders, 1 assassin, same words as the two-team deal", () => {
+    const coop = newBoard(11, { coop: true });
+    const duel = newBoard(11);
+    expect(coop.cards.map((c) => c.word)).toEqual(duel.cards.map((c) => c.word));
+    expect(remaining(coop, coop.startingTeam)).toBe(9);
+    expect(remaining(coop, coop.startingTeam === "red" ? "blue" : "red")).toBe(15);
+    expect(remaining(coop, "neutral")).toBe(0);
+    expect(remaining(coop, "assassin")).toBe(1);
+  });
+});
+
 describe("reveal", () => {
   test("marks one card and leaves the rest", () => {
     const board = newBoard(7);

@@ -9,22 +9,48 @@ A Codenames spymaster and guesser built on TypeSafe's Jev, through the direct AP
 | Consistency | Same board, same clue, same numbers. Boards are seeded so any turn replays. |
 | Code owns the workflow | Code deals the board, checks clue legality, sets every threshold, and picks the clue. Jev only answers "does this clue reach this word". |
 
+## The web app
+
+```sh
+export TYPESAFE_API_KEY=...
+export ANTHROPIC_API_KEY=...   # optional; without it the clue proposer samples a fixed word list
+bun run server/index.ts        # http://localhost:3000
+```
+
+One cooperative board: you and Jev against 9 agents, 15 bystanders, and 1 assassin, in 9 turns.
+
+- **I give clues, Jev guesses.** Type a clue and the board lights up as you type: one request, 25 nouls and a choice, about 300 ms. The note under the input says what Jev would guess. "Replay the judgment" sends the same clue again and reports the largest change across the 25 words, which is how consistency is shown rather than claimed.
+- **Jev gives clues, I guess.** Claude proposes candidate words from the key, code drops illegal ones, Jev judges every candidate against every word, code picks. The pipeline strip shows each step with its count, time, and cost. Jev's probabilities stay hidden until your turn ends, then the board shows what it was thinking and which words it meant.
+
+![Spymaster mode: the board as a probability heatmap for the clue HOSPITAL](docs/spymaster.png)
+
+Environment: `PORT`, `CODENAMES_STYLE` (`full` or `compact` question wording), `JEV_MODEL`, `PROPOSER_MODEL` (default `claude-opus-5`), `TRUST_PROXY=1` to read `X-Forwarded-For` behind a reverse proxy. Games live in memory for two hours; per-IP token buckets limit previews, new boards, and Jev spymaster turns separately. Keys never reach the browser.
+
+Routes, all JSON under `/api/games`: `POST /` (new game: `mode`, optional `seed`), `GET /:id`, `POST /:id/preview` (`clue`), `POST /:id/clue` (`clue`, `number`), `POST /:id/ask`, `POST /:id/guess` (`word`), `POST /:id/pass`.
+
 ## Layout
 
 ```
+server/
+  index.ts      Bun.serve: static page, JSON routes, rate limits, key handling
+  session.ts    the game state machine, pure; both modes, views per role
+web/
+  index.html, styles.css, app.ts, card.ts   the page, light and dark, and the PNG turn card
 src/
-  board.ts      seeded deal: 9 / 8 / 7 / 1, mulberry32 so a seed reproduces a board
+  board.ts      seeded deal: 9 / 8 / 7 / 1 (or 9 / 15 / 1 cooperative), mulberry32 so a seed reproduces a board
   legality.ts   one word, not on the board, not a compound, not an inflection
   questions.ts  the state and the 26 questions sent per clue
   judge.ts      TypeSafeJudge (live) and CachingJudge (replay from disk)
   scorer.ts     thresholds -> number, targets, risks, rejections; pickClue; guessOrder
-  cli.ts        `board <seed>` and `judge <clue> --seed <n>`
+  game.ts       spymasterTurn (propose -> legality -> judge -> pick, two rounds), applyGuesses, playGame
+  proposer.ts   ClaudeProposer (structured output, candidates only), WordlistProposer, ListProposer
+  cli.ts        `board <seed>`, `judge <clue> --seed <n>`, `play --seed <n> [--clues a,b,c]`
 eval/
   dataset.ts    ClueRow, the JSONL row shape for human clue data
   salt.ts       converter for the SALT-NLP Codenames Duet data
   run.ts        the phase 0 gate: AUC, Brier, assassin, repeat std, latency, cost
   metrics.ts    pure metric functions
-test/           unit tests; no network
+test/           unit tests for the engine and the session state machine; no network
 data/           generated files, ignored by git (see data/README.md)
 ```
 

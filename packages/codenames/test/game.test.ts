@@ -75,6 +75,23 @@ describe("spymasterTurn", () => {
     const turn = await spymasterTurn(board, "red", new ListProposer(["grave"]), judge, DEFAULT_THRESHOLDS);
     expect(turn.chosen).toBeNull();
   });
+
+  test("asks for a second round, excluding the first batch, before passing", async () => {
+    const judge = new TableJudge({ river: { bank: 0.9, flow: 0.85 } });
+    const calls: (string[] | undefined)[] = [];
+    const proposer: Proposer = {
+      async propose(input) {
+        calls.push(input.exclude);
+        return { clues: calls.length === 1 ? ["grave", "dust"] : ["river"], model: "t", costUsd: 0.001, latencyMs: 5 };
+      },
+    };
+    const turn = await spymasterTurn(board, "red", proposer, judge, DEFAULT_THRESHOLDS, { candidates: 2, concurrency: 2, rounds: 2 });
+    expect(calls).toEqual([undefined, ["grave", "dust"]]);
+    expect(turn.chosen?.clue).toBe("river");
+    expect(turn.judge.requests).toBe(3);
+    expect(turn.proposer.costUsd).toBeCloseTo(0.002);
+    expect(turn.proposed).toEqual(["grave", "dust", "river"]);
+  });
 });
 
 describe("applyGuesses", () => {
@@ -101,7 +118,7 @@ describe("applyGuesses", () => {
 describe("playGame", () => {
   test("ends in a stalemate when both sides pass on the same board", async () => {
     const judge = new TableJudge({});
-    const log = await playGame(newBoard(3), new ListProposer(["nothing"]), judge, DEFAULT_THRESHOLDS, { candidates: 1, concurrency: 1 });
+    const log = await playGame(newBoard(3), new ListProposer(["nothing"]), judge, DEFAULT_THRESHOLDS, { candidates: 1, concurrency: 1, rounds: 1 });
     expect(log.reason).toBe("stalemate");
     expect(log.turns).toHaveLength(2);
     expect(log.winner).toBeNull();

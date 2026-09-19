@@ -12,6 +12,8 @@ export interface ProposeInput {
   neutral: string[];
   assassin: string;
   count: number;
+  /** Clues already tried this turn; a second round must avoid them. */
+  exclude?: string[];
 }
 
 export interface ProposeResult {
@@ -38,9 +40,11 @@ export interface SpymasterTurn {
 export interface TurnOptions {
   candidates: number;
   concurrency: number;
+  /** Proposal rounds before passing. A second round asks for different clues; the policy never loosens. */
+  rounds?: number;
 }
 
-export const DEFAULT_TURN_OPTIONS: TurnOptions = { candidates: 30, concurrency: 8 };
+export const DEFAULT_TURN_OPTIONS: TurnOptions = { candidates: 30, concurrency: 8, rounds: 2 };
 
 export function other(team: Team): Team {
   return team === "red" ? "blue" : "red";
@@ -67,39 +71,52 @@ export async function spymasterTurn(
   options: TurnOptions = DEFAULT_TURN_OPTIONS,
 ): Promise<SpymasterTurn> {
   const visible = unrevealed(board).map((c) => c.word);
-  const proposed = await proposer.propose({ ...keyFor(board, team), count: options.candidates });
-
+  const key = keyFor(board, team);
   const seen = new Set<string>();
-  const legal: string[] = [];
+  const proposed: string[] = [];
   const illegal: SpymasterTurn["illegal"] = [];
-  for (const raw of proposed.clues) {
-    const clue = normalize(raw);
-    if (!clue || seen.has(clue)) continue;
-    seen.add(clue);
-    const reason = clueRejection(clue, visible);
-    if (reason) illegal.push({ clue, reason });
-    else legal.push(clue);
-  }
+  const candidates: ClueEvaluation[] = [];
+  const proposerStats = { model: "", costUsd: 0, latencyMs: 0 };
+  let judgeMs = 0;
+  let chosen: ClueEvaluation | null = null;
 
-  const started = performance.now();
-  const judgments = await mapLimit(legal, options.concurrency, (clue) => judge.judge(clue, visible));
-  const latencyMs = performance.now() - started;
-  const candidates = judgments
-    .map((j) => evaluateClue(j, board, team, thresholds))
-    .sort((a, b) => b.score - a.score);
+  for (let round = 0; round < (options.rounds ?? 1) && !chosen; round++) {
+    const batch = await proposer.propose({ ...key, count: options.candidates, ...(round > 0 ? { exclude: [...seen] } : {}) });
+    proposerStats.model = batch.model;
+    proposerStats.costUsd += batch.costUsd;
+    proposerStats.latencyMs += batch.latencyMs;
+    proposed.push(...batch.clues);
+
+    const legal: string[] = [];
+    for (const raw of batch.clues) {
+      const clue = normalize(raw);
+      if (!clue || seen.has(clue)) continue;
+      seen.add(clue);
+      const reason = clueRejection(clue, visible);
+      if (reason) illegal.push({ clue, reason });
+      else legal.push(clue);
+    }
+
+    const started = performance.now();
+    const judgments = await mapLimit(legal, options.concurrency, (clue) => judge.judge(clue, visible));
+    judgeMs += performance.now() - started;
+    candidates.push(...judgments.map((j) => evaluateClue(j, board, team, thresholds)));
+    chosen = pickClue(candidates);
+  }
+  candidates.sort((a, b) => b.score - a.score);
 
   return {
     team,
-    proposed: proposed.clues,
+    proposed,
     illegal,
     candidates,
-    chosen: pickClue(candidates),
-    proposer: { model: proposed.model, costUsd: proposed.costUsd, latencyMs: proposed.latencyMs },
+    chosen,
+    proposer: proposerStats,
     judge: {
-      requests: judgments.length,
-      pairs: judgments.reduce((n, j) => n + j.words.length, 0),
-      costUsd: judgments.reduce((s, j) => s + j.costUsd, 0),
-      latencyMs,
+      requests: candidates.length,
+      pairs: candidates.reduce((n, c) => n + c.judgment.words.length, 0),
+      costUsd: candidates.reduce((s, c) => s + c.judgment.costUsd, 0),
+      latencyMs: judgeMs,
     },
   };
 }

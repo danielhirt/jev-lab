@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { CLUE_WORDS } from "./cluewords";
 import type { ProposeInput, ProposeResult, Proposer } from "./game";
+import { mulberry32, shuffle } from "./rng";
 
 /**
  * The generative half of the split. Claude sees the spymaster's key and brainstorms candidate
@@ -50,6 +52,7 @@ export class ClaudeProposer implements Proposer {
               neutral_words: input.neutral,
               assassin: input.assassin,
               how_many_candidates: input.count,
+              ...(input.exclude?.length ? { do_not_propose: input.exclude } : {}),
             },
             null,
             2,
@@ -76,5 +79,22 @@ export class ListProposer implements Proposer {
   constructor(private readonly clues: readonly string[]) {}
   async propose(): Promise<ProposeResult> {
     return { clues: [...this.clues], model: "list", costUsd: 0, latencyMs: 0 };
+  }
+}
+
+/**
+ * No-LLM fallback: sample concept words from a fixed list, seeded by the board so a replay
+ * proposes the same candidates. Lower quality than a model that sees the key, which is the
+ * point of the comparison, and enough to run the demo without an Anthropic key.
+ */
+export class WordlistProposer implements Proposer {
+  constructor(private readonly words: readonly string[] = CLUE_WORDS) {}
+  async propose(input: ProposeInput): Promise<ProposeResult> {
+    const seed = [...input.friendly, ...input.opponent].join("|");
+    let h = 2166136261;
+    for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+    const rand = mulberry32(h);
+    const exclude = new Set((input.exclude ?? []).map((w) => w.toLowerCase()));
+    return { clues: shuffle(this.words, rand).filter((w) => !exclude.has(w)).slice(0, input.count), model: "wordlist", costUsd: 0, latencyMs: 0 };
   }
 }
