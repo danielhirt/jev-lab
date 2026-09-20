@@ -23,12 +23,12 @@ One cooperative board: you and Jev against 9 agents, 15 bystanders, and 1 assass
 
 - **I give clues, Jev guesses.** Type a clue and the board lights up as you type: one request, 25 nouls and a choice, about 300 ms. The note under the input says what Jev would guess. "Replay the judgment" sends the same clue again and reports the largest change across the 25 words, which is how consistency is shown rather than claimed.
 - **Side by side.** With an Anthropic key configured, a toggle asks a chat model (default Claude Haiku 4.5, `BASELINE_MODEL` to change it) the same question about the same clue in one structured call at temperature 0. Each card shows both numbers; a strip compares latency, cost, and how many words each model left in the uncertain band; replay reports both models' largest change. The comparison never drives play.
-- **Jev gives clues, I guess.** Claude proposes candidate words from the key, code drops illegal ones, Jev judges every candidate against every word, code picks. Verdicts stream to the page as they land, with the reason for each rejection, and the pipeline strip sums the turn. Jev's probabilities stay hidden until your turn ends, then the board shows what it was thinking and which words it meant.
-- **The header carries the evidence:** the phase 0 numbers from the eval below, served from `/api/config`.
+- **Jev gives clues, I guess.** Claude proposes candidate words from the key, code drops illegal ones, Jev judges every candidate against every word, code picks. Verdicts stream to the page as they land, with the reason for each rejection, and the pipeline strip sums the turn, then states what the same judging would take through the chat model at its measured per-call latency and cost. Jev's probabilities stay hidden until your turn ends, then the board shows what it was thinking and which words it meant.
+- **The header carries the evidence:** Jev's and the chat model's agreement with real human guesses on the same 300 clues, from the eval below, served from `/api/config`.
 
 ![Typing a clue: HORSE lights up the assassin, CANYON reaches VALLEY and leaves DESERT in the uncertain band](docs/spymaster.gif)
 
-A 67-second captioned recording of both modes is in [`docs/codenames.mp4`](docs/codenames.mp4): a tempting clue that reaches the assassin, a clue whose number Jev refuses to over-guess, the same clue put to a chat model side by side, a replay of both, and Jev giving a clue of its own. It was captured with Playwright against the live API on seed 7 (`docs/record.mjs`), so anyone can replay the same board.
+A 73-second captioned recording of both modes is in [`docs/codenames.mp4`](docs/codenames.mp4): a tempting clue that reaches the assassin, a clue whose number Jev refuses to over-guess, the same clue put to a chat model side by side, a replay of both, and Jev giving a clue for two words with the cost of the same judging through a chat model beside it. It was captured with Playwright against the live API on seeds 7 and 11 (`docs/record.mjs`), so anyone can replay the same boards. [`WALKTHROUGH.md`](WALKTHROUGH.md) is the same tour by hand.
 
 Environment: `PORT`, `CODENAMES_STYLE` (`full` or `compact` question wording), `JEV_MODEL`, `PROPOSER_MODEL` (default `claude-opus-5`), `TRUST_PROXY=1` to read `X-Forwarded-For` behind a reverse proxy. Games live in memory for two hours; per-IP token buckets limit previews, new boards, and Jev spymaster turns separately. Keys never reach the browser.
 
@@ -55,7 +55,8 @@ src/
 eval/
   dataset.ts    ClueRow, the JSONL row shape for human clue data
   salt.ts       converter for the SALT-NLP Codenames Duet data
-  run.ts        the phase 0 gate: AUC, Brier, assassin, repeat std, latency, cost
+  run.ts        the phase 0 gate: AUC, Brier, assassin, repeat std, latency, cost; --judge baseline scores the chat model
+  tune.ts       threshold tuning on cached judgments against what human guessers did
   metrics.ts    pure metric functions
 test/           unit tests for the engine and the session state machine; no network
 data/           generated files, ignored by git (see data/README.md)
@@ -80,10 +81,10 @@ Both come from the docs' guidance to pair a choice (which one) with nouls (wheth
 | --- | --- | --- |
 | `act` | 0.70 | A friendly word at or above this counts toward the clue's number and is guessed. |
 | `uncertainLow` | 0.30 | Between here and `act` a word is uncertain: never counted, listed as a risk if it is not ours. |
-| `assassinMax` | 0.10 | A clue with the assassin above this is rejected outright. |
-| `opponentMax` | 0.40 | A clue with any opponent word above this is rejected. |
+| `assassinMax` | 0.30 | A clue with the assassin above this is rejected outright. |
+| `opponentMax` | 0.55 | A clue with any opponent word above this is rejected. |
 
-Among eligible clues, the score is the number, plus how far the targets clear `act`, minus half a point per risky non-friendly word. These defaults are a starting point; the eval below is what sets them.
+Among eligible clues, the score is the number, plus how far the targets clear `act`, minus half a point per risky non-friendly word. The two ceilings were set on human outcomes; see Threshold tuning below.
 
 ## Phase 0: the gate
 
@@ -116,7 +117,50 @@ Pass criteria, set before the run: guess AUC and target AUC well above 0.5 (a ra
 | input tokens per request | 3,247 | 1,537 |
 | cost per request | $0.000136 | $0.000064 |
 
-Reading it: a random ranker scores 0.5 AUC and 0.04 top-1, so Jev's per-word probability tracks both the giver's intent and the guesser's actual pick, and its single most likely word is the human's guess two times in three. Repeat std near 0.01 means a threshold decision moves only on words that sit within a hundredth of it. The assassin numbers describe the human clues, not Jev: Duet keys carry three assassins and human givers take real risks with them, so `assassinMax` at 0.10 would veto some clues people actually gave. That is the intended behavior for a spymaster that never loses on the assassin, and the eval is the place to tune it. `full` stays the default for its better calibration; `compact` is the flag to flip when cost or latency matters more.
+Reading it: a random ranker scores 0.5 AUC and 0.04 top-1, so Jev's per-word probability tracks both the giver's intent and the guesser's actual pick, and its single most likely word is the human's guess two times in three. Repeat std near 0.01 means a threshold decision moves only on words that sit within a hundredth of it. The assassin numbers describe the human clues, not Jev: Duet keys carry three assassins and human givers take real risks with them, so a ceiling of 0.10 vetoed almost every clue people actually gave; Threshold tuning below is where it was reset. `full` stays the default for its better calibration; `compact` is the flag to flip when cost or latency matters more.
+
+## Against a chat model (2026-09-19)
+
+`--judge baseline` puts Claude Haiku 4.5 through the same harness: one structured call per clue at temperature 0, the same note, the same words. Both judges saw the same clues, sampled with seed 1.
+
+```sh
+bun run eval/run.ts data/salt-duet.jsonl --n 300 --repeats 1
+bun run eval/run.ts data/salt-duet.jsonl --n 300 --repeats 1 --judge baseline
+```
+
+| metric | Jev (jev-1.13.0) | Claude Haiku 4.5 |
+| --- | --- | --- |
+| clues | 300 | 298 (2 dropped on API errors) |
+| guess AUC | 0.935 | 0.880 |
+| guess top-1 | 0.69 | 0.60 |
+| target AUC | 0.950 | 0.902 |
+| Brier vs guessed | 0.066 | 0.047 |
+| repeat std, all words (100-clue run) | 0.0125 over 20 repeats | 0.0120 over 5 repeats |
+| latency ms, median | 227 | 1,674 |
+| cost per request | $0.000136 | $0.00197 |
+
+Reading it: on the 299 clues both judged, only Jev's top word was the human's guess on 41 and only Haiku's on 13 (a two-sided sign test puts that under 0.001). Jev ranks the board better, 7 times faster, at a fourteenth of the cost. Two results go the other way and are reported as such. Haiku has the lower Brier score: the outcome here is one guessed word among about twenty, so a judge that says low numbers everywhere scores well, and Jev's noul answers "would a guesser connect this", which is true of several words per clue. And Haiku at temperature 0 repeats itself as closely as Jev does, so stability is not a difference between them.
+
+The cost gap is what the design rests on. A Jev spymaster turn judges 30 to 50 candidates against 25 words each; at Haiku's measured figures that judging alone is about $0.06 to $0.10 and 6 to 10 s a turn with 8 calls in flight, against about $0.005 and 1 s.
+
+## Threshold tuning (2026-09-19)
+
+`eval/tune.ts` replays cached judgments, so it costs nothing. It puts each human clue through `evaluateClue` as if the spymaster had proposed it (friendly words are the board minus the words the giver had to avoid; Duet's bystanders take the opponent ceiling, as on the cooperative board) and reports what the human guesser then did.
+
+```sh
+bun run eval/run.ts data/salt-duet.jsonl --n 1500 --repeats 1 --concurrency 8   # about $0.20, fills the cache
+bun run eval/tune.ts data/salt-duet.jsonl
+```
+
+On 1,506 human clues the guess hit a word to avoid 10.1% of the time and an assassin 1.9%.
+
+| policy | clues accepted | guess hit a word to avoid | guess hit an assassin |
+| --- | --- | --- | --- |
+| assassin <= 0.10, opponent <= 0.40 (old) | 2.1% | 6.3% | 3.1% |
+| assassin <= 0.30, opponent <= 0.55 (default) | 30.9% | 5.4% | 0.9% |
+| assassin <= 0.50, opponent <= 0.85 | 60.2% | 7.7% | 0.8% |
+
+The old ceilings rejected 98% of the clues people gave and bought no safety for it. Humans picked an assassin no more often when Jev had it anywhere under 0.30 than under 0.10, and more often above that (2.5% at 0.30 to 0.50, 6.5% above 0.70). They picked a word to avoid 5% to 9% of the time with Jev's strongest bystander under 0.55, 13% at 0.55 to 0.70, and 24% above 0.85. With the Claude proposer, three of five seeds now open with a clue for two or three words (SAILOR 2, TROUT 3, SNARE 2); under the old ceilings one of three did. A ceiling set relative to the weakest target was tried and dropped: with `act` at 0.70 the targets already sit far above both ceilings, so it never changed a decision.
 
 ## Trying it
 

@@ -37,7 +37,7 @@ export interface TurnView {
   stop: "done" | "wrong" | "assassin" | "nothing" | "pass" | "open";
   /** Per-word probabilities, released once the turn is over. */
   heat: Record<string, { p: number; first: number }> | null;
-  pipeline: { proposed: number; illegal: number; judged: number; pairs: number; ms: number; costUsd: number; proposer: string } | null;
+  pipeline: { proposed: number; illegal: number; judged: number; pairs: number; ms: number; costUsd: number; judgeMs: number; judgeCostUsd: number; proposer: string } | null;
 }
 
 export interface Game {
@@ -205,7 +205,8 @@ export async function askClue(
   game.meter.proposerCostUsd += turn.proposer.costUsd;
   const pipeline: TurnView["pipeline"] = {
     proposed: turn.proposed.length, illegal: turn.illegal.length, judged: turn.judge.requests, pairs: turn.judge.pairs,
-    ms: Math.round(turn.judge.latencyMs + turn.proposer.latencyMs), costUsd: turn.judge.costUsd + turn.proposer.costUsd, proposer: turn.proposer.model,
+    ms: Math.round(turn.judge.latencyMs + turn.proposer.latencyMs), costUsd: turn.judge.costUsd + turn.proposer.costUsd,
+    judgeMs: Math.round(turn.judge.latencyMs), judgeCostUsd: turn.judge.costUsd, proposer: turn.proposer.model,
   };
   if (!turn.chosen) {
     const passed: TurnView = { n: game.turns.length + 1, clue: "", number: 0, targets: [], guesses: [], stop: "pass", heat: null, pipeline };

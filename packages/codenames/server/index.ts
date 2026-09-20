@@ -26,8 +26,16 @@ const proposer = useClaude ? new ClaudeProposer(undefined, process.env.PROPOSER_
 const candidates = useClaude ? 30 : 60;
 const baseline: (Judge & { model: string }) | null = useClaude ? new ClaudeBaseline(undefined, process.env.BASELINE_MODEL) : null;
 
-/** Phase 0 numbers shown on the page; from eval/run.ts on 100 SALT-NLP human clues, 2026-09-19. */
-const EVAL = { clues: 100, guessTop1: 0.64, guessAuc: 0.94, chance: 1 / 25, repeatStd: 0.012 };
+/**
+ * Phase 0 numbers shown on the page: `eval/run.ts` on the same 300 SALT-NLP human clues, Jev and then `--judge baseline`, 2026-09-19.
+ * Repeat std and the baseline's per-call latency and cost come from the 100-clue runs with repeats.
+ */
+const EVAL = {
+  clues: 300, guessTop1: 0.69, guessAuc: 0.935, chance: 1 / 25, repeatStd: 0.012,
+  baseline: { model: "claude-haiku-4-5", guessTop1: 0.60, guessAuc: 0.88, msPerCall: 1674, usdPerCall: 0.00197 },
+  /** Judge requests the spymaster turn keeps in flight; the chat-model estimate assumes the same. */
+  concurrency: 8,
+};
 
 const games = new Map<string, Game>();
 setInterval(() => {

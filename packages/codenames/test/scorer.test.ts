@@ -34,10 +34,19 @@ describe("evaluateClue", () => {
 
   test("rejects on the assassin regardless of targets", () => {
     const e = evaluateClue(
-      judgment("grave", { bank: 0.9, flow: 0.9, boat: 0.9, money: 0.1, desert: 0.1, death: 0.3 }),
+      judgment("grave", { bank: 0.9, flow: 0.9, boat: 0.9, money: 0.1, desert: 0.1, death: 0.45 }),
       board, "red", DEFAULT_THRESHOLDS,
     );
     expect(e.rejected).toContain("assassin");
+  });
+
+  test("accepts an assassin far below the targets", () => {
+    const e = evaluateClue(
+      judgment("cruise", { bank: 0.2, flow: 0.85, boat: 0.9, money: 0.1, desert: 0.1, death: 0.16 }),
+      board, "red", DEFAULT_THRESHOLDS,
+    );
+    expect(e.rejected).toBeNull();
+    expect(e.number).toBe(2);
   });
 
   test("rejects on a strong opponent word", () => {

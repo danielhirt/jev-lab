@@ -43,11 +43,16 @@ export interface Thresholds {
   opponentMax: number;
 }
 
+/**
+ * The two ceilings were set on 1,506 human clues (`eval/tune.ts`). Human guessers picked an assassin
+ * no more often when Jev had it anywhere under 0.30 than under 0.10, and the rate climbed above that;
+ * they picked a word to avoid more often once Jev had one above 0.55.
+ */
 export const DEFAULT_THRESHOLDS: Thresholds = {
   act: 0.7,
   uncertainLow: 0.3,
-  assassinMax: 0.1,
-  opponentMax: 0.4,
+  assassinMax: 0.3,
+  opponentMax: 0.55,
 };
 
 export interface ClueEvaluation {

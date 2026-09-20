@@ -73,6 +73,7 @@ export async function convertSalt(root: string): Promise<ClueRow[]> {
       targets,
       avoid: [...black, ...tan].filter((w) => board.includes(w)),
       assassin: black.find((w) => board.includes(w)),
+      assassins: black.filter((w) => board.includes(w)),
     });
   });
   return rows;

@@ -12,14 +12,18 @@
  *   assassin    noul on the assassin words, mean and p90 (lower is safer)
  *   repeat std  std of every word's noul over R repeats of a subset (stability)
  * plus median latency and cost per request. Judgments are cached in data/cache-*.json so a rerun is free.
+ *
+ * `--judge baseline` scores the chat-model comparison arm on the same sample, so the two tables
+ * compare like for like. Its `first` is its nouls normalized, so choice argmax equals noul argmax.
  */
+import { ClaudeBaseline, DEFAULT_BASELINE_MODEL } from "../src/baseline";
 import { CachingJudge, TypeSafeJudge, type Judge } from "../src/judge";
 import type { QuestionStyle } from "../src/questions";
 import { readRows, type ClueRow } from "./dataset";
 import { auc, brier, mean, median, percentile, std } from "./metrics";
 import { mapLimit } from "../src/util";
 
-interface Args { path: string; n: number; repeats: number; repeatRows: number; seed: number; concurrency: number; model: string; style: QuestionStyle }
+interface Args { path: string; n: number; repeats: number; repeatRows: number; seed: number; concurrency: number; model: string; style: QuestionStyle; judge: "jev" | "baseline" }
 
 function parseArgs(argv: string[]): Args {
   const flag = (name: string, fallback: string) => {
@@ -31,7 +35,8 @@ function parseArgs(argv: string[]): Args {
     if (argv[i]!.startsWith("--")) i++;
     else path ??= argv[i];
   }
-  if (!path) throw new Error("usage: bun run eval/run.ts <rows.jsonl> [--n 100] [--repeats 20] [--repeat-rows 10] [--seed 1] [--concurrency 4] [--model jev-latest] [--style full|compact]");
+  if (!path) throw new Error("usage: bun run eval/run.ts <rows.jsonl> [--n 100] [--repeats 20] [--repeat-rows 10] [--seed 1] [--concurrency 4] [--judge jev|baseline] [--model jev-latest] [--style full|compact]");
+  const which = flag("judge", "jev") === "baseline" ? "baseline" : "jev";
   return {
     path,
     n: Number(flag("n", "100")),
@@ -39,8 +44,9 @@ function parseArgs(argv: string[]): Args {
     repeatRows: Number(flag("repeat-rows", "10")),
     seed: Number(flag("seed", "1")),
     concurrency: Number(flag("concurrency", "4")),
-    model: flag("model", "jev-latest"),
+    model: flag("model", which === "baseline" ? DEFAULT_BASELINE_MODEL : "jev-latest"),
     style: flag("style", "full") === "compact" ? "compact" : "full",
+    judge: which,
   };
 }
 
@@ -56,15 +62,18 @@ const fmt = (x: number | null | undefined, d = 3) => (x === null || x === undefi
 
 async function main() {
   const args = parseArgs(Bun.argv.slice(2));
-  const rows = sample(await readRows(args.path), args.n, args.seed);
-  const live: Judge = new TypeSafeJudge(undefined, args.model, args.style);
-  const judge = new CachingJudge(live, `data/cache-${args.model}-${args.style}.json`);
+  const sampled = sample(await readRows(args.path), args.n, args.seed);
+  const live: Judge = args.judge === "baseline" ? new ClaudeBaseline(undefined, args.model) : new TypeSafeJudge(undefined, args.model, args.style);
+  const judge = new CachingJudge(live, `data/cache-${args.model}-${args.judge === "baseline" ? "baseline" : args.style}.json`);
 
   const guessAuc: number[] = [], targetAuc: number[] = [], brierPairs: [number, boolean][] = [];
   const assassinP: number[] = [], latencies: number[] = [], costs: number[] = [];
   let guessTop1 = 0, firstTop1 = 0;
 
-  const judged = await mapLimit(rows, args.concurrency, (row) => judge.judge(row.clue, row.board));
+  // A row the judge cannot answer (a server error that survives the SDK's retries) is dropped and counted, not fatal.
+  const attempts = await mapLimit(sampled, args.concurrency, (row) => judge.judge(row.clue, row.board).catch((err: unknown) => { console.error(`skipped "${row.clue}": ${(err as Error).message.slice(0, 80)}`); return null; }));
+  const rows = sampled.filter((_, i) => attempts[i] !== null);
+  const judged = attempts.filter((j) => j !== null);
   judged.forEach((j, idx) => {
     const row: ClueRow = rows[idx]!;
     const p = new Map(j.words.map((w) => [w.word, w.p]));
@@ -103,7 +112,7 @@ async function main() {
   }
 
   const table = [
-    ["clues judged", String(rows.length)],
+    ["clues judged", sampled.length === rows.length ? String(rows.length) : `${rows.length} (${sampled.length - rows.length} skipped on judge errors)`],
     ["guess AUC (noul)", fmt(mean(guessAuc))],
     ["guess top-1 (noul argmax)", fmt(guessTop1 / rows.length)],
     ["guess top-1 (choice argmax)", fmt(firstTop1 / rows.length)],
@@ -114,7 +123,7 @@ async function main() {
     ["repeat std, assassin (mean / max)", args.repeats > 1 ? `${fmt(mean(assassinStd), 4)} / ${fmt(Math.max(...assassinStd), 4)}` : "skipped"],
     ["latency ms median / p90", `${fmt(median(latencies), 0)} / ${fmt(percentile(latencies, 0.9), 0)}`],
     ["cost per request USD", fmt(mean(costs), 6)],
-    ["model / style", `${judged[0]?.model ?? args.model} / ${args.style}`],
+    ["model / style", `${judged[0]?.model ?? args.model} / ${args.judge === "baseline" ? "one structured call" : args.style}`],
     ["input tokens per request (mean)", fmt(mean(judged.map((j) => j.inputTokens)), 0)],
   ];
   console.log("| metric | value |\n| --- | --- |");

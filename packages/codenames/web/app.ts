@@ -3,7 +3,7 @@ import type { Judgment } from "../src/types";
 import { download, drawCard, heatStep } from "./card";
 
 type Heat = Record<string, { p: number; first: number }>;
-interface Config { judge: string; style: string; proposer: string; baseline: string | null; eval: { clues: number; guessTop1: number; guessAuc: number; chance: number; repeatStd: number } }
+interface Config { judge: string; style: string; proposer: string; baseline: string | null; eval: { clues: number; guessTop1: number; guessAuc: number; chance: number; repeatStd: number; concurrency: number; baseline: { model: string; guessTop1: number; guessAuc: number; msPerCall: number; usdPerCall: number } } }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const boardEl = $("board"), statusEl = $("status"), logEl = $("log"), meterEl = $("meter"), pipelineEl = $("pipeline");
@@ -132,6 +132,14 @@ function renderPipeline(t: TurnView | undefined) {
   ];
   for (const html of parts) { const s = document.createElement("span"); s.innerHTML = html; steps.append(s); }
   pipelineEl.append(steps);
+  // What the judging alone would take through the chat model, from its measured per-call figures.
+  const b = config?.eval.baseline;
+  if (b && p.judged > 0) {
+    const usd = p.judged * b.usdPerCall, secs = (p.judged * b.msPerCall) / config!.eval.concurrency / 1000;
+    const note = document.createElement("p"); note.className = "versus";
+    note.innerHTML = `The judging alone: Jev took <b>${(p.judgeMs / 1000).toFixed(1)} s</b> and <b>$${p.judgeCostUsd.toFixed(4)}</b>. The same ${p.judged} calls to ${modelName(b.model)}, at its measured ${(b.msPerCall / 1000).toFixed(1)} s and $${b.usdPerCall.toFixed(4)} a call and the same ${config!.eval.concurrency} in flight, come to about <b>${secs.toFixed(0)} s</b> and <b>$${usd.toFixed(2)}</b>: <b>${(usd / Math.max(1e-9, p.judgeCostUsd)).toFixed(0)}×</b> the cost. At Jev's price, code can afford to judge every candidate against every word.`;
+    pipelineEl.append(note);
+  }
 }
 
 function bandCounts(j: Judgment | null) {
@@ -168,11 +176,12 @@ function renderCompare() {
 }
 
 function renderStatus() {
-  if (!game) return;
+  if (!game) { if (dealError) setStatus(dealError); return; }
   const last = game.turns[game.turns.length - 1];
   if (game.status === "won") setStatus(`Cleared all 9 agents in ${game.turns.length} turn${game.turns.length === 1 ? "" : "s"}.`);
   else if (game.status === "lost") setStatus(game.reason === "assassin" ? "The assassin. Game over." : "Out of turns.");
   else setStatus(`${game.agentsLeft} agents left · ${game.turnsLeft} turns left`);
+  if (dealError) setStatus(dealError);
 
   $("spymaster-panel").hidden = mode !== "spymaster";
   $("guesser-panel").hidden = mode !== "guesser";
@@ -204,15 +213,17 @@ function shareUrl(): string {
   return u.toString();
 }
 
+/** Why the last deal failed; render() would otherwise overwrite it with the old game's status. */
+let dealError: string | null = null;
 async function newGame(seed?: number) {
-  busy = true;
+  busy = true; dealError = null;
   try {
     game = await api<GameView>("/api/games", { mode, seed });
     heat = null; lastPreview = null; baselineHeat = null; lastBaseline = null; baselineState = "off"; feedEl.hidden = true;
     clueInput.value = ""; replayBtn.disabled = true; note(replayNote, ""); note(previewNote, mode === "spymaster" ? "The board lights up as you type: one request, 25 nouls and a choice, about 300 ms." : "");
     seedInput.value = String(game.seed);
     history.replaceState(null, "", shareUrl());
-  } catch (e) { setStatus((e as Error).message); }
+  } catch (e) { dealError = (e as Error).message; }
   finally { busy = false; render(); }
 }
 
@@ -415,7 +426,7 @@ async function loadConfig(): Promise<Config | null> {
   if (loaded?.baseline) { compareWrap.hidden = false; $("baseline-name").textContent = modelName(loaded.baseline); }
   if (loaded) {
     const e = loaded.eval;
-    $("stat").innerHTML = `On <b>${e.clues}</b> real human games, Jev's top pick was the human's actual guess <b>${Math.round(e.guessTop1 * 100)}%</b> of the time; chance is <b>${Math.round(e.chance * 100)}%</b>. Repeat the same clue and its numbers move by about <b>${e.repeatStd.toFixed(2)}</b>. <a href="https://github.com/danielhirt/jev-lab/tree/main/packages/codenames#phase-0-results-2026-09-19-jev-1130">How it was measured</a>.`;
+    $("stat").innerHTML = `On <b>${e.clues}</b> clues from real human games, Jev's top pick was the human's actual guess <b>${Math.round(e.guessTop1 * 100)}%</b> of the time; ${modelName(e.baseline.model)}, asked the same question, matched <b>${Math.round(e.baseline.guessTop1 * 100)}%</b>; chance is <b>${Math.round(e.chance * 100)}%</b>. Repeat the same clue and its numbers move by about <b>${e.repeatStd.toFixed(2)}</b>. <a href="https://github.com/danielhirt/jev-lab/tree/main/packages/codenames#phase-0-results-2026-09-19-jev-1130">How it was measured</a>.`;
   }
   return loaded;
 }

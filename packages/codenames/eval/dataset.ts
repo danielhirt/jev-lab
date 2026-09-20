@@ -14,6 +14,8 @@ export interface ClueRow {
   targets?: string[];
   avoid?: string[];
   assassin?: string;
+  /** Every assassin still on the board; Duet has up to three. */
+  assassins?: string[];
 }
 
 export async function readRows(path: string): Promise<ClueRow[]> {

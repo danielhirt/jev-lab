@@ -3,7 +3,7 @@ import { chromium } from "playwright-core";
 import fs from "node:fs";
 
 const base = "http://localhost:3100";
-const W = 1280, H = 1060; // full board in frame, with room under it for the caption
+const W = 1280, H = 1090; // full board in frame, with room under it for the caption
 const marks = [];
 const t0 = Date.now();
 const mark = (label) => { marks.push([((Date.now() - t0) / 1000).toFixed(1), label]); console.log(marks.at(-1).join("s  ")); };
@@ -91,22 +91,26 @@ await caption(""); await giveAndWait(1); await pause(1600); mark("library guesse
 
 // 5. Switch roles: Jev gives the clues.
 await caption("Swap roles. A language model proposes clue words; Jev judges every candidate against every word; code picks.");
-await click("#mode-guesser"); await page.waitForFunction(() => !document.getElementById("ask").disabled, null, { timeout: 15000 }); await pause(2200); mark("guesser mode");
+await click("#mode-guesser"); await page.waitForFunction(() => !document.getElementById("ask").disabled, null, { timeout: 15000 });
+// A fresh board for this mode: on seed 11 the picked clue is for two words on most runs.
+await page.fill("#seed", "11"); await page.dispatchEvent("#seed", "change");
+await page.waitForFunction(() => [...document.querySelectorAll(".cardw")].some((c) => /kite/i.test(c.textContent)) && !document.getElementById("ask").disabled, null, { timeout: 15000 }); await pause(1800); mark("guesser mode");
 await click("#ask");
 await page.waitForFunction(() => document.querySelectorAll("#feed li").length >= 4, null, { timeout: 60000 });
-await caption("Every verdict, live: thousands of word pairs in a few seconds for a cent. Rejections say why."); await pause(3200); mark("feed");
+await caption("Every verdict, live: hundreds of word pairs in a few seconds for a cent. Rejections say why."); await pause(3200); mark("feed");
 await page.waitForFunction(() => !document.getElementById("open-clue").hidden || document.querySelectorAll("#log li").length > 0, null, { timeout: 120000 });
-await pause(1800); await caption("Jev's probabilities stay hidden until the guess. Tap a card."); await pause(1800); mark("clue asked");
+await pause(1200); await caption("The same judging through a chat model would cost about 13 times as much. That price is why code can judge every candidate."); await pause(4200); mark("versus");
+await caption("Jev's probabilities stay hidden until the guess. Tap a card."); await pause(1800); mark("clue asked");
 const clue = (await page.textContent("#open-clue"))?.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-const known = { afternoon: "tea", arachnid: "spider", web: "spider", cobweb: "spider", crumpet: "tea", china: "tea", evening: "night", camping: "tent", library: "book", rain: "umbrella", dark: "night", reading: "book", literature: "book", insect: "spider", bug: "spider", wild: "zoo", animal: "zoo", safari: "zoo", weather: "umbrella", sleep: "night", bedroom: "night", beverage: "tea", breakfast: "tea", coffee: "tea", hunting: "trap", fishing: "trap", mountain: "valley", landscape: "valley", nature: "valley", hiking: "valley", egypt: "desert", arctic: "desert", climate: "desert" };
-const pick = known[clue];
-if (pick && (await page.locator(".cardw.clickable", { hasText: new RegExp(`^${pick}$`, "i") }).count()) > 0) {
-  await click(`.cardw.clickable:has-text("${pick}")`); mark(`guessed ${pick} for ${clue}`);
-  await pause(1200);
-  if (await page.locator("#pass").isVisible()) { await click("#pass"); mark("ended turn"); }
-} else if (await page.locator("#pass").isVisible()) {
-  await pause(800); await click("#pass"); mark(`passed on ${clue}`);
+// The guesser cannot see the key, so the script knows the answers only for clues seen on this seed; any other clue ends in a pass.
+const known = { sailor: ["ship", "deck"], boat: ["ship", "deck"], cruise: ["ship", "deck"], voyage: ["ship", "deck"], sailing: ["ship", "deck"], navy: ["ship", "deck"], captain: ["ship", "deck"], powerpoint: ["slide", "deck"], playground: ["slide"], cricket: ["bat", "match"], carpenter: ["hammer", "deck"], toolbox: ["hammer"], nail: ["hammer"], waterpark: ["slide"], poker: ["deck"], cards: ["deck"] };
+let picked = 0;
+for (const pick of known[clue] ?? []) {
+  const card = `.cardw.clickable:has-text("${pick}")`;
+  if ((await page.locator(card).count()) === 0) break;
+  await click(card); picked++; mark(`guessed ${pick} for ${clue}`); await pause(1400);
 }
+if (await page.locator("#pass").isVisible()) { await pause(600); await click("#pass"); mark(picked ? "ended turn" : `passed on ${clue}`); }
 await page.waitForFunction(() => document.querySelectorAll(".cardw.heat").length > 0, null, { timeout: 15000 });
 await caption("Turn over: the board shows what Jev was thinking and which word it meant."); await pause(4200); mark("heat revealed");
 await caption("");

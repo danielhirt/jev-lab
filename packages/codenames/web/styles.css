@@ -138,6 +138,7 @@ label { color: var(--ink-2); font-size: 0.9rem; display: block; margin-bottom: 4
 .pipeline { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; font-size: 0.88rem; color: var(--ink-2); }
 .pipeline b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .pipeline .steps { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.pipeline .versus { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
 .meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0; border-top: 1px solid var(--line); padding-top: 10px; }
 .meter div { min-width: 0; }
 .meter dt { color: var(--ink-3); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
