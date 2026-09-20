@@ -2,3 +2,5 @@ node_modules/
 runs/
 packages/codenames/data/*.jsonl
 packages/codenames/data/cache-*.json
+.env
+.env.*

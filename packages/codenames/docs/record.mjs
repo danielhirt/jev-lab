@@ -3,12 +3,13 @@ import { chromium } from "playwright-core";
 import fs from "node:fs";
 
 const base = "http://localhost:3100";
-const W = 1280, H = 900; // full board in frame
+const W = 1280, H = 1060; // full board in frame, with room under it for the caption
 const marks = [];
 const t0 = Date.now();
 const mark = (label) => { marks.push([((Date.now() - t0) / 1000).toFixed(1), label]); console.log(marks.at(-1).join("s  ")); };
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+// CHROMIUM_PATH names the Chromium binary; without it Playwright looks under PLAYWRIGHT_BROWSERS_PATH.
+const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const ctx = await browser.newContext({ viewport: { width: W, height: H }, colorScheme: "light", deviceScaleFactor: 1, recordVideo: { dir: "video", size: { width: W, height: H } } });
 const page = await ctx.newPage();
 // A visible cursor, so clicks read on the recording.
@@ -24,13 +25,13 @@ await page.addInitScript(() => {
 });
 
 const pause = (ms) => page.waitForTimeout(ms);
-/** A caption bar at the bottom of the frame; empty text hides it. */
+/** A caption bar under the board, clear of the bottom row; empty text hides it. */
 async function caption(text) {
   await page.evaluate((t) => {
     let el = document.getElementById("rec-caption");
     if (!el) {
       el = document.createElement("div"); el.id = "rec-caption";
-      el.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:min(900px,92vw);background:rgba(26,26,25,.92);color:#fcfcfb;font:600 20px/1.35 system-ui,sans-serif;padding:12px 18px;border-radius:12px;z-index:9998;text-align:center;transition:opacity 180ms;pointer-events:none";
+      el.style.cssText = "position:fixed;left:446px;bottom:18px;transform:translateX(-50%);width:max-content;max-width:840px;background:rgba(26,26,25,.92);color:#fcfcfb;font:600 20px/1.35 system-ui,sans-serif;padding:12px 18px;border-radius:12px;z-index:9998;text-align:center;transition:opacity 180ms;pointer-events:none";
       document.body.append(el);
     }
     el.textContent = t; el.style.opacity = t ? "1" : "0";
@@ -75,7 +76,7 @@ if (hasCompare) {
   await caption("Now ask a chat model the same question about the same clue, side by side."); await click("#compare"); await typeClue("rain");
   await page.waitForFunction(() => document.querySelector("#compare-strip .verdict") !== null, null, { timeout: 60000 });
   await pause(4200); mark("compare rain");
-  await caption("Replay both. Jev's numbers hold to a hundredth; watch what the chat model does."); await click("#replay");
+  await caption("Replay both: same clue, same board, asked again. The note shows the largest change for each."); await click("#replay");
   await page.waitForFunction(() => document.getElementById("replay-note").textContent.includes("temperature"), null, { timeout: 60000 }); await pause(4200); mark("compare replay");
   await click("#compare");
 } else {
@@ -97,7 +98,7 @@ await caption("Every verdict, live: thousands of word pairs in a few seconds for
 await page.waitForFunction(() => !document.getElementById("open-clue").hidden || document.querySelectorAll("#log li").length > 0, null, { timeout: 120000 });
 await pause(1800); await caption("Jev's probabilities stay hidden until the guess. Tap a card."); await pause(1800); mark("clue asked");
 const clue = (await page.textContent("#open-clue"))?.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-const known = { china: "tea", evening: "night", camping: "tent", library: "book", rain: "umbrella", dark: "night", reading: "book", literature: "book", insect: "spider", bug: "spider", wild: "zoo", animal: "zoo", safari: "zoo", weather: "umbrella", sleep: "night", bedroom: "night", beverage: "tea", breakfast: "tea", coffee: "tea", hunting: "trap", fishing: "trap", mountain: "valley", landscape: "valley", nature: "valley", hiking: "valley", egypt: "desert", arctic: "desert", climate: "desert" };
+const known = { afternoon: "tea", arachnid: "spider", web: "spider", cobweb: "spider", crumpet: "tea", china: "tea", evening: "night", camping: "tent", library: "book", rain: "umbrella", dark: "night", reading: "book", literature: "book", insect: "spider", bug: "spider", wild: "zoo", animal: "zoo", safari: "zoo", weather: "umbrella", sleep: "night", bedroom: "night", beverage: "tea", breakfast: "tea", coffee: "tea", hunting: "trap", fishing: "trap", mountain: "valley", landscape: "valley", nature: "valley", hiking: "valley", egypt: "desert", arctic: "desert", climate: "desert" };
 const pick = known[clue];
 if (pick && (await page.locator(".cardw.clickable", { hasText: new RegExp(`^${pick}$`, "i") }).count()) > 0) {
   await click(`.cardw.clickable:has-text("${pick}")`); mark(`guessed ${pick} for ${clue}`);

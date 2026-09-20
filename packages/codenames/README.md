@@ -28,7 +28,7 @@ One cooperative board: you and Jev against 9 agents, 15 bystanders, and 1 assass
 
 ![Typing a clue: HORSE lights up the assassin, CANYON reaches VALLEY and leaves DESERT in the uncertain band](docs/spymaster.gif)
 
-A 48-second recording of both modes is in [`docs/codenames.mp4`](docs/codenames.mp4): a tempting clue that reaches the assassin, a clue whose number Jev refuses to over-guess, a replay showing the numbers hold, and Jev giving a clue of its own. It was captured with Playwright against the live API on seed 7 (`docs/record.mjs`), so anyone can replay the same board.
+A 67-second captioned recording of both modes is in [`docs/codenames.mp4`](docs/codenames.mp4): a tempting clue that reaches the assassin, a clue whose number Jev refuses to over-guess, the same clue put to a chat model side by side, a replay of both, and Jev giving a clue of its own. It was captured with Playwright against the live API on seed 7 (`docs/record.mjs`), so anyone can replay the same board.
 
 Environment: `PORT`, `CODENAMES_STYLE` (`full` or `compact` question wording), `JEV_MODEL`, `PROPOSER_MODEL` (default `claude-opus-5`), `TRUST_PROXY=1` to read `X-Forwarded-For` behind a reverse proxy. Games live in memory for two hours; per-IP token buckets limit previews, new boards, and Jev spymaster turns separately. Keys never reach the browser.
 

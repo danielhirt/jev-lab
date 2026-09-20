@@ -182,6 +182,8 @@ async function handle(req: Request, server: { requestIP(req: Request): { address
 
 const server = Bun.serve({
   port: PORT,
+  // A turn with the Claude proposer can go more than Bun's default 10 s without writing a byte.
+  idleTimeout: 120,
   development: process.env.NODE_ENV !== "production",
   routes: { "/": page },
   async fetch(req, srv) {
