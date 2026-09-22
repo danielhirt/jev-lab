@@ -6,6 +6,7 @@ Experiments on TypeSafe's **Jev**, a "System One" decision model: you send a `st
 | --- | --- |
 | [`packages/lab`](packages/lab) | The original CLI: determinism, perturbation, and calibration checks on Jev through OpenRouter, plus a Haiku 4.5 comparison arm. Findings in its README and [`docs/how-jev-works.md`](docs/how-jev-works.md). |
 | [`packages/codenames`](packages/codenames) | A Codenames spymaster and guesser built on the direct TypeSafe API: engine, offline eval against human play, and a web app where every card shows Jev's probability. The public demo: fan-out, calibration, and consistency as visible game mechanics. |
+| [`packages/wavelength`](packages/wavelength) | A Wavelength round on the Score primitive. Code hides the target, Jev places every clue in one request, and the distance is the score. |
 
 Shared docs live in [`docs/`](docs): the model contract and findings, and the ideas backlog.
 
@@ -22,6 +23,7 @@ Per-package commands run from the root:
 ```sh
 bun run lab -- --help           # packages/lab, needs OPENROUTER_API_KEY
 bun run codenames -- board 7    # packages/codenames CLI; `bun run --cwd packages/codenames server/index.ts` serves the web app (needs TYPESAFE_API_KEY)
+bun run wavelength -- deal 7    # packages/wavelength; scoring needs TYPESAFE_API_KEY in that package's .env
 ```
 
 Add a package by creating `packages/<name>` with its own `package.json` and a `tsconfig.json` that extends `../../tsconfig.base.json`.

@@ -7,7 +7,8 @@
   "scripts": {
     "lab": "bun run --cwd packages/lab lab",
     "codenames": "bun run --cwd packages/codenames cli",
-    "typecheck": "bun run --cwd packages/lab typecheck && bun run --cwd packages/codenames typecheck",
+    "wavelength": "bun run --cwd packages/wavelength cli",
+    "typecheck": "bun run --cwd packages/lab typecheck && bun run --cwd packages/codenames typecheck && bun run --cwd packages/wavelength typecheck",
     "test": "bun test"
   },
   "devDependencies": {

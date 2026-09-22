@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wavelength</title>
+  <meta name="description" content="A Wavelength round scored by TypeSafe's Jev. You see the target. The model places each clue on the spectrum, and code measures the distance.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%231a1a19'/%3E%3Cpath d='M6 20h20' stroke='%23f2f2ef' stroke-width='2'/%3E%3Cpath d='M16 12v12' stroke='%23256abf' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.ts"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Wavelength</h1>
+      <p class="tag">You see the target. Jev sees the two poles and your clues, and places each clue on the scale. Code measures the distance.</p>
+    </div>
+    <div class="controls">
+      <label class="seed">Seed <input id="seed" type="number" min="1" max="1000000" inputmode="numeric"></label>
+      <button id="new-round" class="ghost" type="button">New spectrum</button>
+    </div>
+  </header>
+
+  <p id="banner" class="banner" hidden></p>
+
+  <section class="stage" aria-label="Spectrum">
+    <div class="poles">
+      <h2 id="left"></h2>
+      <h2 id="right"></h2>
+    </div>
+    <div class="track" id="track">
+      <div class="mark target" id="target-mark"><span id="target-label"></span></div>
+    </div>
+  </section>
+
+  <section class="play">
+    <form id="composer">
+      <label class="sr" for="clue">Clue</label>
+      <input id="clue" type="text" maxlength="40" autocomplete="off" spellcheck="false" placeholder="A short clue">
+      <button class="ghost" type="submit">Add clue</button>
+      <button id="score" class="primary" type="button">Score clues</button>
+    </form>
+    <ul id="clue-list"></ul>
+    <p id="note" class="note" aria-live="polite"></p>
+    <div id="results"></div>
+    <details id="rubric">
+      <summary>Rubric Jev scores against</summary>
+      <ol id="levels"></ol>
+    </details>
+  </section>
+</body>
+</html>
