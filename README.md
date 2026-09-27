@@ -1,4 +1,9 @@
-# jev-lab
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/header-dark.svg">
+    <img src="assets/header-light.svg" width="100%" alt="jev-lab. Typed questions in. Calibrated answers out.">
+  </picture>
+</p>
 
 Experiments on TypeSafe's **Jev**, a "System One" decision model: you send a `state` and a map of typed questions, and it returns one calibrated, structured answer per question. Code owns the workflow; Jev supplies narrow judgments. This repo is a Bun workspace with one package per experiment.
 
@@ -27,3 +32,5 @@ bun run wavelength -- deal 7    # packages/wavelength; scoring needs TYPESAFE_AP
 ```
 
 Add a package by creating `packages/<name>` with its own `package.json` and a `tsconfig.json` that extends `../../tsconfig.base.json`.
+
+`uv run assets/make_header.py` redraws the header above and `assets/social-preview.png`. It needs the Geist font and `rsvg-convert`.

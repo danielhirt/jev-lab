@@ -4,3 +4,4 @@ packages/codenames/data/*.jsonl
 packages/codenames/data/cache-*.json
 .env
 .env.*
+__pycache__/
